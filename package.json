@@ -1,0 +1,28 @@
+{
+  "name": "aws-gaming",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "bun run --workspaces build",
+    "build:api:lambda": "bun run --cwd apps/api build:lambda",
+    "typecheck": "bun run --workspaces typecheck",
+    "dev": "echo 'Run bun run dev:api and bun run dev:web in separate terminals'",
+    "dev:api": "bun run --cwd apps/api dev",
+    "dev:web": "bun run --cwd apps/web dev",
+    "tf:fmt": "terraform fmt -recursive infra/terraform",
+    "tf:init:local": "terraform -chdir=infra/terraform/stack init -backend=false",
+    "tf:validate": "terraform -chdir=infra/terraform/stack init -backend=false && terraform -chdir=infra/terraform/stack validate",
+    "tf:init": "terraform -chdir=infra/terraform/stack init -backend-config=backend.hcl",
+    "tf:plan:hello": "terraform -chdir=infra/terraform/stack plan -var-file=hello-world.tfvars",
+    "tf:apply:hello": "terraform -chdir=infra/terraform/stack apply -var-file=hello-world.tfvars",
+    "tf:destroy:hello": "terraform -chdir=infra/terraform/stack destroy -var-file=hello-world.tfvars"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.1",
+    "typescript": "^5.7.3"
+  }
+}

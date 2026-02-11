@@ -1,0 +1,29 @@
+project_name = "aws-gaming"
+environment  = "default"
+aws_region   = "sa-east-1"
+api_lambda_zip_path = "../../../apps/api/dist/lambda.zip"
+
+tags = {
+  Owner = "platform"
+}
+
+game_instances = {
+  hello-web = {
+    template_id     = "hello-world"
+    container_image = "pvermeyden/nodejs-hello-world:a1e8cf1edcc04e6d905078aed9861807f6da0da4"
+    container_port  = 80
+    host_port       = 80
+    health_port     = 8080
+    instance_type   = "t3.micro"
+    instance_count  = 1
+    task_count      = 1
+    # Set this to your health sidecar image once built/published.
+    # health_sidecar_image = "123456789012.dkr.ecr.sa-east-1.amazonaws.com/health-sidecar:latest"
+    allowed_ingress_cidrs = [
+      "0.0.0.0/0"
+    ]
+    ssh_ingress_cidrs = []
+    # dns_name        = "hello-web.play.example.com"
+    # route53_zone_id = "Z1234567890ABC"
+  }
+}
