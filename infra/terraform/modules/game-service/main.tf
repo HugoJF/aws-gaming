@@ -7,6 +7,7 @@ locals {
   ecs_service_name       = "${local.name_prefix}-${var.game_instance_id}"
   asg_name               = "${local.name_prefix}-${var.game_instance_id}-asg"
   cluster_name           = element(reverse(split("/", var.ecs_cluster_arn)), 0)
+  game_instance_id_regex = replace(var.game_instance_id, "-", "\\-")
   health_sidecar_enabled = try(trimspace(var.health_sidecar_image) != "", false)
 
   base_tags = merge(var.tags, {
@@ -149,7 +150,8 @@ resource "aws_launch_template" "this" {
     "#!/bin/bash -xe",
     "echo ECS_CLUSTER=${local.cluster_name} >> /etc/ecs/ecs.config",
     "echo ECS_ENABLE_TASK_IAM_ROLE=true >> /etc/ecs/ecs.config",
-    "echo ECS_ENABLE_TASK_IAM_ROLE_NETWORK_HOST=true >> /etc/ecs/ecs.config"
+    "echo ECS_ENABLE_TASK_IAM_ROLE_NETWORK_HOST=true >> /etc/ecs/ecs.config",
+    "echo ECS_INSTANCE_ATTRIBUTES='{\"GameInstance\":\"${var.game_instance_id}\"}' >> /etc/ecs/ecs.config"
   ]))
 
   iam_instance_profile {
@@ -240,6 +242,12 @@ resource "aws_ecs_service" "this" {
   deployment_maximum_percent         = 100
 
   tags = local.base_tags
+
+  # Hard-pin each service to its own EC2 capacity in the shared cluster.
+  placement_constraints {
+    type       = "memberOf"
+    expression = "attribute:GameInstance =~ ^${local.game_instance_id_regex}$"
+  }
 
   depends_on = [aws_autoscaling_group.this]
 }

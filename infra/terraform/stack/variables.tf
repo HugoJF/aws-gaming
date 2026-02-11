@@ -28,6 +28,12 @@ variable "platform_public_subnet_cidrs" {
   default     = ["10.0.1.0/24", "10.0.2.0/24"]
 }
 
+variable "platform_route53_zone_id" {
+  description = "Optional shared Route53 hosted zone ID used by all game instances in this stack"
+  type        = string
+  default     = null
+}
+
 variable "tags" {
   description = "Common tags for all resources"
   type        = map(string)
@@ -68,6 +74,12 @@ variable "api_lambda_timeout_seconds" {
   description = "Timeout (seconds) for API Lambda"
   type        = number
   default     = 30
+}
+
+variable "api_lambda_reserved_concurrent_executions" {
+  description = "Reserved concurrency limit for API Lambda. Set null to disable."
+  type        = number
+  default     = 20
 }
 
 variable "api_lambda_architectures" {
@@ -123,26 +135,68 @@ variable "api_environment_variables" {
   default     = {}
 }
 
+variable "api_enable_attack_detection_alarms" {
+  description = "Whether to create attack-detection CloudWatch alarms for the public API Lambda"
+  type        = bool
+  default     = true
+}
+
+variable "api_alarm_action_arns" {
+  description = "Alarm action ARNs (for example SNS topics) for API attack-detection alarms"
+  type        = list(string)
+  default     = []
+}
+
+variable "api_ok_action_arns" {
+  description = "OK action ARNs (for example SNS topics) for API attack-detection alarms"
+  type        = list(string)
+  default     = []
+}
+
+variable "api_alarm_invocations_threshold" {
+  description = "Invocation count threshold (5-minute Sum) for suspicious traffic alarm"
+  type        = number
+  default     = 3000
+}
+
+variable "api_alarm_errors_threshold" {
+  description = "Error count threshold (5-minute Sum) for suspicious traffic alarm"
+  type        = number
+  default     = 25
+}
+
+variable "api_alarm_throttles_threshold" {
+  description = "Throttle count threshold (5-minute Sum) for suspicious traffic alarm"
+  type        = number
+  default     = 5
+}
+
+variable "api_alarm_concurrency_threshold" {
+  description = "Concurrent executions threshold (5-minute Maximum) for suspicious traffic alarm"
+  type        = number
+  default     = 20
+}
+
+variable "shared_health_sidecar_image" {
+  description = "Optional shared health sidecar image used by all game instances"
+  type        = string
+  default     = null
+}
+
 variable "game_instances" {
   description = "Map of game instances to deploy"
   type = map(object({
     template_id                  = string
     container_image              = string
-    container_port               = optional(number, 80)
     host_port                    = optional(number, 80)
-    health_port                  = optional(number, 8080)
     instance_type                = optional(string, "t3.micro")
-    instance_count               = optional(number, 1)
-    task_count                   = optional(number, 1)
     container_memory_reservation = optional(number, 256)
-    health_sidecar_image         = optional(string)
     ecs_optimized_ami_ssm_path   = optional(string, "/aws/service/ecs/optimized-ami/amazon-linux-2/recommended/image_id")
     ssh_key_name                 = optional(string)
     spot_max_price               = optional(string)
-    allowed_ingress_cidrs        = optional(list(string), ["0.0.0.0/0"])
+    extra_ingress_cidrs          = optional(list(string), [])
     ssh_ingress_cidrs            = optional(list(string), [])
     dns_name                     = optional(string)
-    route53_zone_id              = optional(string)
   }))
   default = {}
 }

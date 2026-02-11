@@ -9,12 +9,13 @@
 
 ## Game instance definition model
 
-Game instances are defined as explicit module references (not via input variables):
+Game instances are defined in variables (`game_instances`) and deployed via `for_each`:
 
 - File: `infra/terraform/stack/main.tf`
-- Pattern: one module per game server (e.g. `module "game_service_hello_web"`)
+- Variable: `var.game_instances`
+- Example values: `infra/terraform/stack/hello-world.tfvars`
 
-To add a server, copy an existing game-service module block and change ids/ports/images.
+To add a server, add a new key to `game_instances` in the tfvars file.
 
 ## First deploy (hello world)
 
@@ -33,13 +34,7 @@ aws dynamodb create-table \
   --billing-mode PAY_PER_REQUEST
 ```
 
-2. Ensure backend config exists:
-
-```bash
-cat infra/terraform/stack/backend.hcl
-```
-
-3. Build the API Lambda artifact:
+2. Build the API Lambda artifact:
 
 ```bash
 make api-lambda
@@ -47,7 +42,7 @@ make api-lambda
 
 This creates `apps/api/dist/lambda.zip` (the default `api_lambda_zip_path` used by the stack).
 
-4. Initialize and deploy:
+3. Initialize and deploy:
 
 ```bash
 make tf-init
@@ -55,7 +50,7 @@ make tf-plan
 make tf-apply
 ```
 
-5. Get the instance public IP (for `hello-web`):
+4. Get the instance public IP (for `hello-web`):
 
 ```bash
 INSTANCE_ID=$(aws ec2 describe-instances \
@@ -71,7 +66,7 @@ aws ec2 describe-instances \
 
 Then open `http://<public-ip>/`.
 
-6. Read the API Function URL output:
+5. Read the API Function URL output:
 
 ```bash
 make tf-output-api-url
@@ -83,25 +78,31 @@ You can override tfvars file when needed:
 make tf-plan TF_VARS_FILE=staging.tfvars
 ```
 
+`hello-world.tfvars` is committed in `infra/terraform/stack/` for this personal setup.
+
 ## Game instance options
 
-Each `module "game_service_<id>"` block supports:
+Each `game_instances.<id>` entry supports:
 
-- `health_sidecar_image` (optional): image for sidecar serving `/ping`
-- `health_port` (optional, default `8080`)
+- `host_port` (game port exposed externally)
 - `dns_name` (optional): game DNS name
-- `route53_zone_id` (optional): hosted zone ID used by API Route53 updates
+- `extra_ingress_cidrs` (optional): additional CIDRs merged with default ingress CIDRs
+
+Behavior enforced by stack wiring:
+
+- `health_port` is fixed to `8080` across all servers.
+- `shared_health_sidecar_image` is shared by all servers in the stack.
+- `platform_route53_zone_id` is shared by all servers in the stack.
+- `instance_count` and `task_count` are always `1`.
+- `container_port` is always equal to `host_port`.
+- Host and health ingress always include stack default CIDRs; `extra_ingress_cidrs` are additive.
 
 When `health_sidecar_image` is set, Terraform adds:
 
 - A second ECS container (`health-sidecar`) in the task definition
 - Security group ingress for `health_port` for `allowed_ingress_cidrs`
 
-Also add the server to API module wiring in `infra/terraform/stack/main.tf`:
-
-- `ecs_service_names`
-- `autoscaling_group_names`
-- `game_instance_configs`
+API wiring for service/asg names and per-instance config is derived automatically from `game_instances`.
 
 ## API stack options
 

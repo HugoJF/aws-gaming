@@ -108,6 +108,72 @@ variable "game_instance_configs" {
   default = {}
 }
 
+variable "ecs_cluster_name" {
+  description = "ECS cluster name used for deriving scoped ECS IAM resource ARNs"
+  type        = string
+  default     = null
+}
+
+variable "ecs_service_names" {
+  description = "ECS service names the API is allowed to update"
+  type        = list(string)
+  default     = []
+}
+
+variable "autoscaling_group_names" {
+  description = "Auto Scaling Group names the API is allowed to update"
+  type        = list(string)
+  default     = []
+}
+
+variable "lambda_reserved_concurrent_executions" {
+  description = "Reserved concurrency limit for API Lambda. Set null to disable."
+  type        = number
+  default     = 20
+}
+
+variable "enable_attack_detection_alarms" {
+  description = "Whether to create CloudWatch alarms for suspicious public API traffic patterns"
+  type        = bool
+  default     = true
+}
+
+variable "alarm_action_arns" {
+  description = "Alarm action ARNs (for example SNS topics) for attack detection alarms"
+  type        = list(string)
+  default     = []
+}
+
+variable "ok_action_arns" {
+  description = "OK action ARNs (for example SNS topics) for attack detection alarms"
+  type        = list(string)
+  default     = []
+}
+
+variable "alarm_invocations_threshold" {
+  description = "Invocation count threshold (5-minute Sum) for suspicious traffic alarm"
+  type        = number
+  default     = 3000
+}
+
+variable "alarm_errors_threshold" {
+  description = "Error count threshold (5-minute Sum) for suspicious traffic alarm"
+  type        = number
+  default     = 25
+}
+
+variable "alarm_throttles_threshold" {
+  description = "Throttle count threshold (5-minute Sum) for suspicious traffic alarm"
+  type        = number
+  default     = 5
+}
+
+variable "alarm_concurrency_threshold" {
+  description = "Concurrent executions threshold (5-minute Maximum) for suspicious traffic alarm"
+  type        = number
+  default     = 20
+}
+
 variable "tags" {
   description = "Common tags"
   type        = map(string)

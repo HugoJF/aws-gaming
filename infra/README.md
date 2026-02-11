@@ -9,8 +9,8 @@ Infrastructure definitions.
 Primary workflow:
 
 ```bash
-bun run build:api:lambda
-bun run tf:init
-bun run tf:plan:hello
-bun run tf:apply:hello
+make api-lambda
+make tf-init
+make tf-plan
+make tf-apply
 ```
