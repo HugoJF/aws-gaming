@@ -1,0 +1,256 @@
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  GetCommand,
+  PutCommand,
+  DeleteCommand,
+  ScanCommand,
+  UpdateCommand,
+} from '@aws-sdk/lib-dynamodb';
+import type {
+  GameTemplate,
+  GameInstance,
+  PowerAction,
+  CachedServerStatus,
+  SecretAccessToken,
+} from '@aws-gaming/contracts';
+
+const FRESHNESS_MS = 5_000;
+const STATUS_TTL_S = 3600; // 1 hour
+const POWER_ACTION_TTL_S = 86400; // 24 hours
+
+export class Repository {
+  private doc: DynamoDBDocumentClient;
+  private tableName: string;
+
+  constructor(tableName: string, region?: string) {
+    const client = new DynamoDBClient({ region });
+    this.doc = DynamoDBDocumentClient.from(client, {
+      marshallOptions: { removeUndefinedValues: true },
+    });
+    this.tableName = tableName;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  GameTemplate                                                     */
+  /* ---------------------------------------------------------------- */
+
+  async getTemplate(id: string): Promise<GameTemplate | null> {
+    const res = await this.doc.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: { pk: `TEMPLATE#${id}`, sk: 'TEMPLATE' },
+      }),
+    );
+    return (res.Item as GameTemplate | undefined) ?? null;
+  }
+
+  async listTemplates(): Promise<GameTemplate[]> {
+    const res = await this.doc.send(
+      new ScanCommand({
+        TableName: this.tableName,
+        FilterExpression: 'entityType = :et',
+        ExpressionAttributeValues: { ':et': 'GameTemplate' },
+      }),
+    );
+    return (res.Items as GameTemplate[]) ?? [];
+  }
+
+  async putTemplate(template: GameTemplate): Promise<void> {
+    await this.doc.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: {
+          pk: `TEMPLATE#${template.id}`,
+          sk: 'TEMPLATE',
+          entityType: 'GameTemplate',
+          ...template,
+        },
+      }),
+    );
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  GameInstance                                                      */
+  /* ---------------------------------------------------------------- */
+
+  async getInstance(id: string): Promise<GameInstance | null> {
+    const res = await this.doc.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: { pk: `INSTANCE#${id}`, sk: 'INSTANCE' },
+      }),
+    );
+    return (res.Item as GameInstance | undefined) ?? null;
+  }
+
+  async listInstances(): Promise<GameInstance[]> {
+    const res = await this.doc.send(
+      new ScanCommand({
+        TableName: this.tableName,
+        FilterExpression: 'entityType = :et',
+        ExpressionAttributeValues: { ':et': 'GameInstance' },
+      }),
+    );
+    return (res.Items as GameInstance[]) ?? [];
+  }
+
+  async putInstance(instance: GameInstance): Promise<void> {
+    await this.doc.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: {
+          pk: `INSTANCE#${instance.id}`,
+          sk: 'INSTANCE',
+          entityType: 'GameInstance',
+          ...instance,
+        },
+      }),
+    );
+  }
+
+  async updateInstanceState(
+    id: string,
+    state: GameInstance['state'],
+  ): Promise<void> {
+    await this.doc.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: { pk: `INSTANCE#${id}`, sk: 'INSTANCE' },
+        UpdateExpression: 'SET #s = :s',
+        ExpressionAttributeNames: { '#s': 'state' },
+        ExpressionAttributeValues: { ':s': state },
+      }),
+    );
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  PowerAction                                                      */
+  /* ---------------------------------------------------------------- */
+
+  async getPowerAction(instanceId: string): Promise<PowerAction | null> {
+    const res = await this.doc.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: { pk: `INSTANCE#${instanceId}`, sk: 'POWER_ACTION' },
+      }),
+    );
+    return (res.Item as (PowerAction & { pk: string }) | undefined)
+      ? (res.Item as unknown as PowerAction)
+      : null;
+  }
+
+  async putPowerAction(
+    instanceId: string,
+    action: PowerAction,
+  ): Promise<void> {
+    const ttl = Math.floor(Date.now() / 1000) + POWER_ACTION_TTL_S;
+    await this.doc.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: {
+          pk: `INSTANCE#${instanceId}`,
+          sk: 'POWER_ACTION',
+          entityType: 'PowerAction',
+          ttl,
+          ...action,
+        },
+      }),
+    );
+  }
+
+  async deletePowerAction(instanceId: string): Promise<void> {
+    await this.doc.send(
+      new DeleteCommand({
+        TableName: this.tableName,
+        Key: { pk: `INSTANCE#${instanceId}`, sk: 'POWER_ACTION' },
+      }),
+    );
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  CachedStatus                                                     */
+  /* ---------------------------------------------------------------- */
+
+  async getCachedStatus(
+    instanceId: string,
+  ): Promise<CachedServerStatus | null> {
+    const res = await this.doc.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: { pk: `INSTANCE#${instanceId}`, sk: 'STATUS_CACHE' },
+      }),
+    );
+    const item = res.Item as (CachedServerStatus & { pk: string }) | undefined;
+    if (!item) return null;
+
+    // Check freshness
+    const age = Date.now() - new Date(item.fetchedAt).getTime();
+    if (age > FRESHNESS_MS) return null;
+
+    return item as unknown as CachedServerStatus;
+  }
+
+  async putCachedStatus(status: CachedServerStatus): Promise<void> {
+    await this.doc.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: {
+          pk: `INSTANCE#${status.instanceId}`,
+          sk: 'STATUS_CACHE',
+          entityType: 'CachedStatus',
+          ...status,
+          ttl: Math.floor(Date.now() / 1000) + STATUS_TTL_S,
+        },
+      }),
+    );
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  SecretAccessToken                                                */
+  /* ---------------------------------------------------------------- */
+
+  async getTokenByHash(tokenHash: string): Promise<SecretAccessToken | null> {
+    const res = await this.doc.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: { pk: `TOKEN#${tokenHash}`, sk: 'TOKEN' },
+      }),
+    );
+    return (res.Item as SecretAccessToken | undefined) ?? null;
+  }
+
+  async putToken(token: SecretAccessToken): Promise<void> {
+    await this.doc.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: {
+          pk: `TOKEN#${token.tokenHash}`,
+          sk: 'TOKEN',
+          entityType: 'SecretAccessToken',
+          ...token,
+        },
+      }),
+    );
+  }
+
+  async deleteToken(tokenHash: string): Promise<void> {
+    await this.doc.send(
+      new DeleteCommand({
+        TableName: this.tableName,
+        Key: { pk: `TOKEN#${tokenHash}`, sk: 'TOKEN' },
+      }),
+    );
+  }
+
+  async listTokens(): Promise<SecretAccessToken[]> {
+    const res = await this.doc.send(
+      new ScanCommand({
+        TableName: this.tableName,
+        FilterExpression: 'entityType = :et',
+        ExpressionAttributeValues: { ':et': 'SecretAccessToken' },
+      }),
+    );
+    return (res.Items as SecretAccessToken[]) ?? [];
+  }
+}

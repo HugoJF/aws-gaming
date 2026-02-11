@@ -10,6 +10,11 @@
     "test": "echo 'No tests yet for @aws-gaming/api'"
   },
   "dependencies": {
+    "@aws-gaming/auth-links": "workspace:*",
+    "@aws-gaming/aws-control": "workspace:*",
+    "@aws-gaming/contracts": "workspace:*",
+    "@aws-sdk/client-dynamodb": "^3.988.0",
+    "@aws-sdk/lib-dynamodb": "^3.988.0",
     "hono": "^4.8.2"
   },
   "devDependencies": {
