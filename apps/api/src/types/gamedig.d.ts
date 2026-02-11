@@ -24,9 +24,7 @@ declare module 'gamedig' {
     ping: number;
   }
 
-  const GameDig: {
+  export const GameDig: {
     query(options: QueryOptions): Promise<QueryResult>;
   };
-
-  export default GameDig;
 }

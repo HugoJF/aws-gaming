@@ -1,4 +1,4 @@
-import GameDig from 'gamedig';
+import { GameDig } from 'gamedig';
 import type { GameType, LiveData } from '@aws-gaming/contracts';
 
 const QUERY_TIMEOUT_MS = 5_000;
