@@ -253,4 +253,48 @@ export class Repository {
     );
     return (res.Items as SecretAccessToken[]) ?? [];
   }
+
+  async getTokenById(id: string): Promise<SecretAccessToken | null> {
+    const res = await this.doc.send(
+      new ScanCommand({
+        TableName: this.tableName,
+        FilterExpression: 'entityType = :et AND id = :id',
+        ExpressionAttributeValues: {
+          ':et': 'SecretAccessToken',
+          ':id': id,
+        },
+        Limit: 1,
+      }),
+    );
+
+    return (res.Items?.[0] as SecretAccessToken | undefined) ?? null;
+  }
+
+  async updateTokenByHash(
+    tokenHash: string,
+    patch: Partial<
+      Pick<
+        SecretAccessToken,
+        'label' | 'gameInstanceIds' | 'expiresAt' | 'isAdmin' | 'revokedAt'
+      >
+    >,
+  ): Promise<SecretAccessToken | null> {
+    const existing = await this.getTokenByHash(tokenHash);
+    if (!existing) return null;
+
+    const updated: SecretAccessToken = {
+      ...existing,
+      ...patch,
+    };
+
+    await this.putToken(updated);
+    return updated;
+  }
+
+  async revokeTokenByHash(
+    tokenHash: string,
+    revokedAt: string,
+  ): Promise<SecretAccessToken | null> {
+    return this.updateTokenByHash(tokenHash, { revokedAt });
+  }
 }

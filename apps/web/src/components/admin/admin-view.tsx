@@ -1,26 +1,33 @@
 import { useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useMockTokens } from '@/hooks/use-mock-tokens';
+import { useAdminTokens } from '@/hooks/use-admin-tokens';
 import { TokenList } from './token-list';
 import { InstanceList } from './instance-list';
 
 type AdminTab = 'tokens' | 'instances';
 
-export function AdminView() {
+interface AdminViewProps {
+  token: string | null;
+}
+
+export function AdminView({ token }: AdminViewProps) {
   const [tab, setTab] = useState<AdminTab>('tokens');
   const {
     tokens,
     instances,
     lastCreated,
+    loading,
+    error,
     create,
     update,
     revoke,
     dismissCreatedBanner,
-  } = useMockTokens();
+    refresh,
+  } = useAdminTokens({ token });
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
-      {/* Tab bar */}
       <div className="mb-6 flex gap-6 border-b border-border">
         <TabButton
           active={tab === 'tokens'}
@@ -36,8 +43,22 @@ export function AdminView() {
         </TabButton>
       </div>
 
-      {/* Tab content */}
-      {tab === 'tokens' ? (
+      {loading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading admin data...
+        </div>
+      ) : error ? (
+        <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4">
+          <p className="text-sm text-destructive">{error}</p>
+          <button
+            onClick={() => void refresh()}
+            className="mt-3 rounded-md border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      ) : tab === 'tokens' ? (
         <TokenList
           tokens={tokens}
           instances={instances}

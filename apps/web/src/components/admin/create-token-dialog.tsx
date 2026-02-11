@@ -8,8 +8,8 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
-import type { AdminInstanceView } from '@/lib/mock-admin-data';
-import type { CreateTokenInput } from '@/hooks/use-mock-tokens';
+import type { AdminInstanceView } from '@aws-gaming/contracts';
+import type { CreateTokenInput } from '@/hooks/use-admin-tokens';
 
 const EXPIRY_PRESETS: readonly { label: string; days: number | null }[] = [
   { label: '7 days', days: 7 },
@@ -23,7 +23,14 @@ interface CreateTokenDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   instances: AdminInstanceView[];
-  onCreate: (input: CreateTokenInput) => void;
+  onCreate: (input: CreateTokenInput) => Promise<void>;
+}
+
+function calculateExpiresAt(days: number | null): string | null {
+  if (days === null) return null;
+  const expires = new Date();
+  expires.setDate(expires.getDate() + days);
+  return expires.toISOString();
 }
 
 export function CreateTokenDialog({
@@ -35,6 +42,9 @@ export function CreateTokenDialog({
   const [label, setLabel] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [expiryDays, setExpiryDays] = useState<number | null>(30);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   function toggleInstance(id: string) {
     setSelectedIds((prev) => {
@@ -45,21 +55,31 @@ export function CreateTokenDialog({
     });
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!label.trim() || selectedIds.size === 0) return;
+    if (!label.trim() || selectedIds.size === 0 || submitting) return;
 
-    onCreate({
-      label: label.trim(),
-      instanceIds: Array.from(selectedIds),
-      expiryDays,
-    });
+    setSubmitting(true);
+    setError(null);
 
-    // Reset form
-    setLabel('');
-    setSelectedIds(new Set());
-    setExpiryDays(30);
-    onOpenChange(false);
+    try {
+      await onCreate({
+        label: label.trim(),
+        instanceIds: Array.from(selectedIds),
+        expiresAt: calculateExpiresAt(expiryDays),
+        isAdmin,
+      });
+
+      setLabel('');
+      setSelectedIds(new Set());
+      setExpiryDays(30);
+      setIsAdmin(false);
+      onOpenChange(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create token');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   const isValid = label.trim().length > 0 && selectedIds.size > 0;
@@ -76,7 +96,6 @@ export function CreateTokenDialog({
           </DialogHeader>
 
           <div className="mt-4 space-y-4">
-            {/* Label */}
             <div>
               <label
                 htmlFor="token-label"
@@ -94,40 +113,44 @@ export function CreateTokenDialog({
               />
             </div>
 
-            {/* Instance checkboxes */}
             <div>
               <p className="text-sm font-medium text-foreground">
                 Server access
               </p>
-              <div className="mt-2 space-y-1.5">
-                {instances.map((inst) => (
-                  <label
-                    key={inst.id}
-                    className={cn(
-                      'flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 text-sm transition-colors',
-                      selectedIds.has(inst.id)
-                        ? 'border-primary/40 bg-primary/5'
-                        : 'border-border hover:bg-accent/50',
-                    )}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(inst.id)}
-                      onChange={() => toggleInstance(inst.id)}
-                      className="rounded border-border"
-                    />
-                    <span className="font-medium text-foreground">
-                      {inst.displayName}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {inst.gameLabel}
-                    </span>
-                  </label>
-                ))}
-              </div>
+              {instances.length === 0 ? (
+                <p className="mt-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                  No game instances found. Deploy at least one instance before creating a token.
+                </p>
+              ) : (
+                <div className="mt-2 space-y-1.5">
+                  {instances.map((inst) => (
+                    <label
+                      key={inst.id}
+                      className={cn(
+                        'flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 text-sm transition-colors',
+                        selectedIds.has(inst.id)
+                          ? 'border-primary/40 bg-primary/5'
+                          : 'border-border hover:bg-accent/50',
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(inst.id)}
+                        onChange={() => toggleInstance(inst.id)}
+                        className="rounded border-border"
+                      />
+                      <span className="font-medium text-foreground">
+                        {inst.displayName}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {inst.gameLabel}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* Expiry presets */}
             <div>
               <p className="text-sm font-medium text-foreground">Expiry</p>
               <div className="mt-2 flex gap-2">
@@ -148,6 +171,20 @@ export function CreateTokenDialog({
                 ))}
               </div>
             </div>
+
+            <label className="flex items-center gap-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                checked={isAdmin}
+                onChange={(e) => setIsAdmin(e.target.checked)}
+                className="rounded border-border"
+              />
+              Grant admin access
+            </label>
+
+            {error && (
+              <p className="text-xs text-destructive">{error}</p>
+            )}
           </div>
 
           <DialogFooter className="mt-6">
@@ -160,10 +197,10 @@ export function CreateTokenDialog({
             </button>
             <button
               type="submit"
-              disabled={!isValid}
+              disabled={!isValid || submitting}
               className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none transition-colors"
             >
-              Create Token
+              {submitting ? 'Creating...' : 'Create Token'}
             </button>
           </DialogFooter>
         </form>

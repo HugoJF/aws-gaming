@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import type { AdminInstanceView } from '@/lib/mock-admin-data';
+import type { AdminInstanceView } from '@aws-gaming/contracts';
 import { Badge } from '@/components/ui/badge';
 
 const STATUS_DOT: Record<string, string> = {

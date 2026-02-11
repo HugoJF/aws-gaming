@@ -5,6 +5,7 @@ import type { Repository } from '../db/repository.js';
 export interface AuthContext {
   tokenId: string;
   gameInstanceIds: string[];
+  isAdmin: boolean;
 }
 
 /**
@@ -41,6 +42,7 @@ export function createAuthMiddleware(repo: Repository) {
     c.set('authContext', {
       tokenId: token.id,
       gameInstanceIds: token.gameInstanceIds,
+      isAdmin: token.isAdmin === true,
     } satisfies AuthContext);
 
     await next();
@@ -50,4 +52,19 @@ export function createAuthMiddleware(repo: Repository) {
 /** Helper to get auth context from Hono context */
 export function getAuthContext(c: Context): AuthContext {
   return c.get('authContext') as AuthContext;
+}
+
+/**
+ * Creates a middleware that allows only admin tokens through.
+ * Must run after auth middleware has set authContext.
+ */
+export function createAdminMiddleware() {
+  return async (c: Context, next: Next) => {
+    const auth = getAuthContext(c);
+    if (!auth.isAdmin) {
+      return c.json({ error: 'Admin access required' }, 403);
+    }
+
+    await next();
+  };
 }

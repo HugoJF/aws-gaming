@@ -15,7 +15,7 @@ const DEFAULT_INTERVAL = 15_000;
 
 interface UseServerPollingOptions {
   token: string | null;
-  onAuthError?: () => void;
+  onAuthError?: (message?: string) => void;
 }
 
 export function useServerPolling({ token, onAuthError }: UseServerPollingOptions) {
@@ -37,8 +37,8 @@ export function useServerPolling({ token, onAuthError }: UseServerPollingOptions
       }
     } catch (err) {
       if (!mountedRef.current) return;
-      if (err instanceof ApiError && err.status === 401) {
-        onAuthError?.();
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        onAuthError?.(err.body.error);
         return;
       }
       setError(err instanceof Error ? err.message : 'Failed to fetch servers');
@@ -58,8 +58,8 @@ export function useServerPolling({ token, onAuthError }: UseServerPollingOptions
           prev.map((s) => (s.id === serverId ? res.server : s)),
         );
       } catch (err) {
-        if (err instanceof ApiError && err.status === 401) {
-          onAuthError?.();
+        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+          onAuthError?.(err.body.error);
         }
         // Silently continue polling on other errors
       }
@@ -120,8 +120,8 @@ export function useServerPolling({ token, onAuthError }: UseServerPollingOptions
           prev.map((s) => (s.id === serverId ? res.server : s)),
         );
       } catch (err) {
-        if (err instanceof ApiError && err.status === 401) {
-          onAuthError?.();
+        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+          onAuthError?.(err.body.error);
         }
         // Re-fetch to get correct state on error
         await pollServer(serverId);

@@ -160,7 +160,8 @@ export interface SecretAccessToken {
   tokenHash: string;
   label?: string;
   gameInstanceIds: string[];
-  expiresAt: string;
+  expiresAt: string | null;
+  isAdmin?: boolean;
   revokedAt?: string;
   createdAt: string;
 }
@@ -188,6 +189,89 @@ export interface PowerResponse {
 export interface ErrorResponse {
   error: string;
   detail?: string;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Admin API Types                                                    */
+/* ------------------------------------------------------------------ */
+
+export type TokenStatus = 'active' | 'revoked' | 'expired';
+
+export interface AdminTokenView {
+  id: string;
+  label: string;
+  tokenPrefix: string;
+  status: TokenStatus;
+  instanceIds: string[];
+  createdAt: string;
+  expiresAt: string | null;
+  revokedAt?: string;
+  isAdmin?: boolean;
+}
+
+export interface AdminInstanceView {
+  id: string;
+  displayName: string;
+  game: GameType;
+  gameLabel: string;
+  location: string;
+  status: ServerStatus;
+  address: string;
+  maxPlayers: number;
+}
+
+export interface MeResponse {
+  tokenId: string;
+  isAdmin: boolean;
+  gameInstanceIds: string[];
+}
+
+export interface AdminListTokensResponse {
+  tokens: AdminTokenView[];
+}
+
+export interface AdminCreateTokenRequest {
+  label: string;
+  instanceIds: string[];
+  expiresAt: string | null;
+  isAdmin?: boolean;
+}
+
+export interface AdminCreateTokenResponse {
+  token: AdminTokenView;
+  rawToken: string;
+}
+
+export interface AdminUpdateTokenRequest {
+  label?: string;
+  instanceIds?: string[];
+  expiresAt?: string | null;
+  isAdmin?: boolean;
+}
+
+export interface AdminUpdateTokenResponse {
+  token: AdminTokenView;
+}
+
+export interface AdminRevokeTokenResponse {
+  token: AdminTokenView;
+}
+
+export interface AdminListInstancesResponse {
+  instances: AdminInstanceView[];
+}
+
+export interface BootstrapStatusResponse {
+  canBootstrap: boolean;
+}
+
+export interface BootstrapCreateAdminRequest {
+  label?: string;
+}
+
+export interface BootstrapCreateAdminResponse {
+  token: AdminTokenView;
+  rawToken: string;
 }
 
 /* ------------------------------------------------------------------ */

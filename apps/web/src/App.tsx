@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useServerPolling } from '@/hooks/use-server-polling';
 import { useAdminMode } from '@/hooks/use-admin-mode';
@@ -11,11 +11,18 @@ import { Loader2 } from 'lucide-react';
 
 export function App() {
   const { token, isAuthenticated, login, logout } = useAuth();
+  const [authError, setAuthError] = useState<string | null>(null);
   const { isAdmin, currentView, setCurrentView } = useAdminMode(token);
 
-  const handleAuthError = useCallback(() => {
+  const handleAuthError = useCallback((message?: string) => {
+    setAuthError(message ?? 'Session expired. Please enter your access token again.');
     logout();
   }, [logout]);
+
+  const handleTokenSubmit = useCallback((nextToken: string) => {
+    setAuthError(null);
+    login(nextToken);
+  }, [login]);
 
   const { servers, loading, error, togglePower } = useServerPolling({
     token,
@@ -23,7 +30,13 @@ export function App() {
   });
 
   if (!isAuthenticated) {
-    return <UnauthedScreen onTokenSubmit={login} />;
+    return (
+      <UnauthedScreen
+        onTokenSubmit={handleTokenSubmit}
+        authError={authError}
+        onDismissAuthError={() => setAuthError(null)}
+      />
+    );
   }
 
   const onlineCount = servers.filter(
@@ -41,7 +54,7 @@ export function App() {
       />
 
       {currentView === 'admin' ? (
-        <AdminView />
+        <AdminView token={token} />
       ) : (
         <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
           <div className="mb-6">
