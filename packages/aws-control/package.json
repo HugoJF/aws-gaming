@@ -6,5 +6,11 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "echo 'No tests yet for @aws-gaming/aws-control'"
+  },
+  "dependencies": {
+    "@aws-sdk/client-auto-scaling": "^3.988.0",
+    "@aws-sdk/client-ec2": "^3.988.0",
+    "@aws-sdk/client-ecs": "^3.988.0",
+    "@aws-sdk/client-route-53": "^3.988.0"
   }
 }
