@@ -1,8 +1,0 @@
-# Example backend config:
-# terraform -chdir=infra/terraform/stack init -backend-config=backend.hcl
-
-bucket         = "replace-with-terraform-state-bucket"
-key            = "aws-gaming/default/terraform.tfstate"
-region         = "sa-east-1"
-dynamodb_table = "replace-with-terraform-locks"
-encrypt        = true
