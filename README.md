@@ -10,7 +10,6 @@ Game server control plane monorepo:
 - `apps/README.md`
 - `apps/api/README.md`
 - `apps/web/README.md`
-- `apps/design/README.md`
 - `packages/README.md`
 - `packages/contracts/README.md`
 - `packages/config/README.md`
@@ -24,6 +23,7 @@ Game server control plane monorepo:
 - `bun` (workspace package manager + scripts)
 - `terraform >= 1.6`
 - `aws` CLI configured for target account/region
+- `make`
 - `zip` (for Lambda artifact packaging)
 
 ## Local Dev
@@ -66,21 +66,15 @@ aws dynamodb create-table \
   --billing-mode PAY_PER_REQUEST
 ```
 
-2. Prepare stack config files:
-
-```bash
-cp infra/terraform/stack/hello-world.tfvars.example infra/terraform/stack/hello-world.tfvars
-```
-
-3. `infra/terraform/stack/backend.hcl` is committed for this personal setup.
-4. Define your game instances in `infra/terraform/stack/main.tf` as explicit `game_service_*` module blocks.
-5. Build API Lambda artifact:
+2. `infra/terraform/stack/backend.hcl` and `infra/terraform/stack/hello-world.tfvars` are committed for this personal setup.
+3. Define shared platform settings and per-server `game_instances` in `infra/terraform/stack/hello-world.tfvars`.
+4. Build API Lambda artifact:
 
 ```bash
 make api-lambda
 ```
 
-6. Initialize backend and deploy:
+5. Initialize backend and deploy:
 
 ```bash
 make tf-init
@@ -88,13 +82,24 @@ make tf-plan
 make tf-apply
 ```
 
-7. Read important outputs:
+6. Read important outputs:
 
 ```bash
 make tf-output-api-url
 terraform -chdir=infra/terraform/stack output game_service_names
 terraform -chdir=infra/terraform/stack output game_asg_names
 ```
+
+## First Access / Admin Bootstrap
+
+1. Open the deployed web app (or local web app pointing at deployed API URL).
+2. If no tokens exist yet, the unauth screen exposes one-time admin bootstrap.
+3. Create the initial admin token in UI. The app will log in automatically.
+4. If bootstrap is already complete, use a token URL (`/t/<token>`) or paste a raw token.
+
+Related bootstrap endpoints (public, one-time guarded):
+- `GET /api/bootstrap/status`
+- `POST /api/bootstrap/admin`
 
 ## Destroy
 
