@@ -1,10 +1,11 @@
 import React from 'react';
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-import { BootSequence, type Stage } from '@/components/boot-sequence';
+import { BootSequence } from '@/components/boot-sequence';
 import { PowerToggle } from '@/components/power-toggle';
 import { useRelativeTime } from '@/hooks/use-relative-time';
+import { useLatencyPing } from '@/hooks/use-latency-ping';
 import {
   HoverCard,
   HoverCardTrigger,
@@ -17,26 +18,19 @@ import {
   CircleCheck,
   CircleX,
   CircleMinus,
+  CircleHelp,
   Activity,
+  Loader2,
 } from 'lucide-react';
+import type {
+  ServerView,
+  ServerStatus,
+  GameType,
+  HealthCheck,
+  HealthCheckStatus,
+} from '@aws-gaming/contracts';
 
-export type ServerStatus = 'online' | 'offline' | 'booting' | 'shutting-down';
-
-export type GameType =
-  | 'minecraft'
-  | 'valheim'
-  | 'csgo'
-  | 'rust'
-  | 'ark'
-  | 'terraria';
-
-export type HealthCheckStatus = 'healthy' | 'unhealthy' | 'degraded';
-
-export interface HealthCheck {
-  name: string;
-  status: HealthCheckStatus;
-  latency?: string;
-}
+export type { ServerView };
 
 const GAME_CONFIG: Record<
   GameType,
@@ -53,7 +47,7 @@ const GAME_CONFIG: Record<
     accentBorder: 'border-sky-400/20',
     accentGlow: 'bg-sky-400/5',
   },
-  csgo: {
+  cs2: {
     accentBorder: 'border-amber-400/20',
     accentGlow: 'bg-amber-400/5',
   },
@@ -71,95 +65,12 @@ const GAME_CONFIG: Record<
   },
 };
 
-export interface ServerData {
-  id: string;
-  name: string;
-  game: GameType;
-  gameLabel: string;
-  ip: string;
-  location: string;
-  players: { current: number; max: number };
-  status: ServerStatus;
-  healthChecks?: HealthCheck[];
-  latency?: number;
-  lastUpdatedAt?: string;
-}
-
 interface ServerCardProps {
-  server: ServerData;
-  onStatusChange: (id: string, newStatus: ServerStatus) => void;
+  server: ServerView;
+  onTogglePower: (serverId: string, action: 'on' | 'off') => void;
 }
 
-// Mock stage definitions for timer-based simulation.
-// When the real API lands, stages come from server.powerAction.stages instead.
-const MOCK_BOOT_STAGES = [
-  { id: 'scaling', label: 'Scaling infrastructure', duration: 1200 },
-  { id: 'registering', label: 'Registering to cluster', duration: 800 },
-  { id: 'starting', label: 'Starting containers', duration: 1500 },
-  { id: 'dns_update', label: 'Updating DNS', duration: 600 },
-  { id: 'game_ready', label: 'Waiting for game', duration: 1800 },
-  { id: 'ready', label: 'Server ready', duration: 400 },
-];
-
-const MOCK_SHUTDOWN_STAGES = [
-  { id: 'stopping', label: 'Stopping containers', duration: 1200 },
-  { id: 'dns_clear', label: 'Clearing DNS', duration: 400 },
-  { id: 'draining', label: 'Draining instance', duration: 800 },
-  { id: 'scaling_down', label: 'Scaling down', duration: 1000 },
-  { id: 'stopped', label: 'Server stopped', duration: 300 },
-];
-
-function useMockStages(
-  isActive: boolean,
-  mockDefs: { id: string; label: string; duration: number }[],
-  onComplete: () => void,
-): Stage[] {
-  const [stages, setStages] = useState<Stage[]>([]);
-  const onCompleteRef = useRef(onComplete);
-  onCompleteRef.current = onComplete;
-
-  useEffect(() => {
-    if (!isActive) {
-      setStages([]);
-      return;
-    }
-
-    const initial: Stage[] = mockDefs.map((d, i) => ({
-      id: d.id,
-      label: d.label,
-      status: i === 0 ? 'in_progress' : 'pending',
-    }));
-    setStages(initial);
-
-    let currentIndex = 0;
-    let timer: ReturnType<typeof setTimeout>;
-
-    const advance = () => {
-      setStages((prev) => {
-        const next = prev.map((s, i) => {
-          if (i === currentIndex) return { ...s, status: 'completed' as const };
-          if (i === currentIndex + 1)
-            return { ...s, status: 'in_progress' as const };
-          return s;
-        });
-        return next;
-      });
-      currentIndex++;
-      if (currentIndex < mockDefs.length) {
-        timer = setTimeout(advance, mockDefs[currentIndex].duration);
-      } else {
-        onCompleteRef.current();
-      }
-    };
-
-    timer = setTimeout(advance, mockDefs[0].duration);
-    return () => clearTimeout(timer);
-  }, [isActive, mockDefs]);
-
-  return stages;
-}
-
-export function ServerCard({ server, onStatusChange }: ServerCardProps) {
+export function ServerCard({ server, onTogglePower }: ServerCardProps) {
   const isOnline = server.status === 'online';
   const isBooting = server.status === 'booting';
   const isShuttingDown = server.status === 'shutting-down';
@@ -167,24 +78,19 @@ export function ServerCard({ server, onStatusChange }: ServerCardProps) {
 
   const gameConfig = GAME_CONFIG[server.game];
 
+  const { latency, pinging } = useLatencyPing({
+    healthEndpoint: server.healthEndpoint,
+    status: server.status,
+  });
+
   const handleToggle = useCallback(() => {
     if (isProcessing) return;
-    onStatusChange(server.id, isOnline ? 'shutting-down' : 'booting');
-  }, [isProcessing, isOnline, server.id, onStatusChange]);
-
-  const handleBootComplete = useCallback(() => {
-    onStatusChange(server.id, 'online');
-  }, [server.id, onStatusChange]);
-
-  const handleShutdownComplete = useCallback(() => {
-    onStatusChange(server.id, 'offline');
-  }, [server.id, onStatusChange]);
-
-  const bootStages = useMockStages(isBooting, MOCK_BOOT_STAGES, handleBootComplete);
-  const shutdownStages = useMockStages(isShuttingDown, MOCK_SHUTDOWN_STAGES, handleShutdownComplete);
-  const activeStages = isBooting ? bootStages : isShuttingDown ? shutdownStages : [];
+    onTogglePower(server.id, isOnline ? 'off' : 'on');
+  }, [isProcessing, isOnline, server.id, onTogglePower]);
 
   const overallHealth = getOverallHealth(server.healthChecks);
+
+  const stages = server.powerAction?.stages ?? [];
 
   return (
     <div
@@ -192,6 +98,7 @@ export function ServerCard({ server, onStatusChange }: ServerCardProps) {
         'group relative rounded-xl border bg-card transition-all duration-300',
         isOnline && gameConfig.accentBorder,
         server.status === 'offline' && 'border-border',
+        server.status === 'error' && 'border-destructive/30',
         isBooting && 'border-primary/30',
         isShuttingDown && 'border-destructive/30',
       )}
@@ -210,7 +117,7 @@ export function ServerCard({ server, onStatusChange }: ServerCardProps) {
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h3 className="truncate font-semibold text-foreground">
-              {server.name}
+              {server.displayName}
             </h3>
             <p className="mt-0.5 text-xs text-muted-foreground">
               {server.gameLabel}
@@ -230,7 +137,7 @@ export function ServerCard({ server, onStatusChange }: ServerCardProps) {
               isBooting={isBooting}
               isShuttingDown={isShuttingDown}
               onToggle={handleToggle}
-              label={`Toggle server ${server.name}`}
+              label={`Toggle server ${server.displayName}`}
             />
           </div>
         </div>
@@ -240,24 +147,29 @@ export function ServerCard({ server, onStatusChange }: ServerCardProps) {
           <InfoChip
             icon={Users}
             value={
-              isOnline
-                ? `${server.players.current} / ${server.players.max}`
-                : `${server.players.max} slots`
+              isOnline && server.liveData
+                ? `${server.liveData.players} / ${server.liveData.maxPlayers}`
+                : `${server.maxPlayers} slots`
             }
-            highlight={isOnline && server.players.current > 0}
+            highlight={isOnline && (server.liveData?.players ?? 0) > 0}
           />
           <InfoChip icon={MapPin} value={server.location} />
-          <InfoChip icon={Globe} value={server.ip} mono />
-          {isOnline && server.latency != null && (
-            <LatencyIndicator latency={server.latency} />
+          <InfoChip icon={Globe} value={server.address} mono />
+          {isOnline && pinging && latency === null && (
+            <div className="ml-auto flex items-center gap-1.5 rounded-md bg-secondary/60 px-2.5 py-1.5 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            </div>
+          )}
+          {isOnline && latency !== null && (
+            <LatencyIndicator latency={latency} />
           )}
         </div>
 
-        {/* Boot / Shutdown sequence */}
-        {activeStages.length > 0 && (
+        {/* Boot / Shutdown sequence (API-driven stages) */}
+        {stages.length > 0 && (
           <BootSequence
             type={isBooting ? 'boot' : 'shutdown'}
-            stages={activeStages}
+            stages={stages}
           />
         )}
       </div>
@@ -273,6 +185,7 @@ function getOverallHealth(
   if (!checks || checks.length === 0) return undefined;
   if (checks.some((c) => c.status === 'unhealthy')) return 'unhealthy';
   if (checks.some((c) => c.status === 'degraded')) return 'degraded';
+  if (checks.every((c) => c.status === 'unknown')) return 'unknown';
   return 'healthy';
 }
 
@@ -283,18 +196,21 @@ const HEALTH_ICON: Record<
   healthy: CircleCheck,
   degraded: CircleMinus,
   unhealthy: CircleX,
+  unknown: CircleHelp,
 };
 
 const HEALTH_COLOR: Record<HealthCheckStatus, string> = {
   healthy: 'text-primary',
   degraded: 'text-amber-400',
   unhealthy: 'text-destructive',
+  unknown: 'text-muted-foreground',
 };
 
 const HEALTH_DOT_COLOR: Record<HealthCheckStatus, string> = {
   healthy: 'bg-primary',
   degraded: 'bg-amber-400',
   unhealthy: 'bg-destructive',
+  unknown: 'bg-muted-foreground',
 };
 
 function getBadgeLabel(
@@ -304,8 +220,10 @@ function getBadgeLabel(
   if (status === 'booting') return 'Booting';
   if (status === 'shutting-down') return 'Stopping';
   if (status === 'offline') return 'Offline';
+  if (status === 'error') return 'Error';
   if (!overallHealth || overallHealth === 'healthy') return 'Healthy';
   if (overallHealth === 'degraded') return 'Degraded';
+  if (overallHealth === 'unknown') return 'Unknown';
   return 'Unhealthy';
 }
 
@@ -324,7 +242,7 @@ function StatusBadge({
 }) {
   const relativeTime = useRelativeTime(lastUpdatedAt ?? null);
   const hasChecks =
-    (status === 'online' || status === 'offline') &&
+    (status === 'online' || status === 'offline' || status === 'error') &&
     healthChecks &&
     healthChecks.length > 0;
 
@@ -335,12 +253,17 @@ function StatusBadge({
         ? 'bg-primary'
         : status === 'offline'
           ? 'bg-muted-foreground'
-          : status === 'booting'
-            ? 'bg-primary animate-pulse'
-            : 'bg-destructive animate-pulse';
+          : status === 'error'
+            ? 'bg-destructive'
+            : status === 'booting'
+              ? 'bg-primary animate-pulse'
+              : 'bg-destructive animate-pulse';
 
   const needsAttention =
-    status === 'online' && overallHealth && overallHealth !== 'healthy';
+    status === 'online' &&
+    overallHealth &&
+    overallHealth !== 'healthy' &&
+    overallHealth !== 'unknown';
 
   const label = getBadgeLabel(status, overallHealth);
 
@@ -359,6 +282,7 @@ function StatusBadge({
           'bg-destructive/10 text-destructive',
         status === 'online' && !overallHealth && 'bg-primary/10 text-primary',
         status === 'offline' && 'bg-secondary text-muted-foreground',
+        status === 'error' && 'bg-destructive/10 text-destructive',
         status === 'booting' && 'bg-primary/10 text-primary',
         status === 'shutting-down' && 'bg-destructive/10 text-destructive',
         hasChecks && 'cursor-default',
@@ -424,9 +348,9 @@ function StatusBadge({
                     {check.name}
                   </span>
                 </div>
-                {check.latency && (
+                {check.detail && (
                   <span className="ml-2 shrink-0 font-mono text-[11px] text-muted-foreground">
-                    {check.latency}
+                    {check.detail}
                   </span>
                 )}
               </div>

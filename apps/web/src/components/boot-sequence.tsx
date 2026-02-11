@@ -1,17 +1,12 @@
 import { cn } from '@/lib/utils';
 import { Check, Loader2, X } from 'lucide-react';
+import type { PowerStage, StageStatus } from '@aws-gaming/contracts';
 
-export type StageStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
-
-export interface Stage {
-  id: string;
-  label: string;
-  status: StageStatus;
-}
+export type { PowerStage as Stage };
 
 interface BootSequenceProps {
   type: 'boot' | 'shutdown';
-  stages: Stage[];
+  stages: PowerStage[];
 }
 
 export function BootSequence({ type, stages }: BootSequenceProps) {
@@ -55,68 +50,100 @@ export function BootSequence({ type, stages }: BootSequenceProps) {
       <div className="p-3">
         <div className="flex flex-col gap-1.5">
           {stages.map((stage) => (
-            <div
+            <StageRow
               key={stage.id}
-              className={cn(
-                'flex items-center gap-2.5 rounded px-2 py-1 font-mono text-xs transition-all duration-300',
-                stage.status === 'completed' && 'text-muted-foreground',
-                stage.status === 'in_progress' &&
-                  (isBoot ? 'text-primary' : 'text-destructive'),
-                stage.status === 'pending' && 'text-muted-foreground/40',
-                stage.status === 'failed' && 'text-destructive',
-              )}
-            >
-              {/* Status icon */}
-              <div className="flex h-4 w-4 shrink-0 items-center justify-center">
-                {stage.status === 'completed' && (
-                  <Check
-                    className={cn(
-                      'h-3.5 w-3.5',
-                      isBoot ? 'text-primary' : 'text-destructive',
-                    )}
-                  />
-                )}
-                {stage.status === 'in_progress' && (
-                  <Loader2
-                    className={cn(
-                      'h-3.5 w-3.5 animate-spin',
-                      isBoot ? 'text-primary' : 'text-destructive',
-                    )}
-                  />
-                )}
-                {stage.status === 'pending' && (
-                  <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/30" />
-                )}
-                {stage.status === 'failed' && (
-                  <X className="h-3.5 w-3.5 text-destructive" />
-                )}
-              </div>
-
-              {/* Stage label */}
-              <span>{stage.label}</span>
-
-              {/* Inline loading dots for current stage */}
-              {stage.status === 'in_progress' && (
-                <span className="inline-flex gap-0.5">
-                  <span className="animate-pulse">{'.'}</span>
-                  <span
-                    className="animate-pulse"
-                    style={{ animationDelay: '200ms' }}
-                  >
-                    {'.'}
-                  </span>
-                  <span
-                    className="animate-pulse"
-                    style={{ animationDelay: '400ms' }}
-                  >
-                    {'.'}
-                  </span>
-                </span>
-              )}
-            </div>
+              stage={stage}
+              isBoot={isBoot}
+            />
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function StageRow({
+  stage,
+  isBoot,
+}: {
+  stage: PowerStage;
+  isBoot: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        'flex items-center gap-2.5 rounded px-2 py-1 font-mono text-xs transition-all duration-300',
+        stage.status === 'completed' && 'text-muted-foreground',
+        stage.status === 'in_progress' &&
+          (isBoot ? 'text-primary' : 'text-destructive'),
+        stage.status === 'pending' && 'text-muted-foreground/40',
+        stage.status === 'failed' && 'text-destructive',
+      )}
+    >
+      {/* Status icon */}
+      <StageIcon status={stage.status} isBoot={isBoot} />
+
+      {/* Stage label */}
+      <span>{stage.label}</span>
+
+      {/* Error detail */}
+      {stage.status === 'failed' && stage.error && (
+        <span className="ml-1 text-destructive/70">({stage.error})</span>
+      )}
+
+      {/* Inline loading dots for current stage */}
+      {stage.status === 'in_progress' && (
+        <span className="inline-flex gap-0.5">
+          <span className="animate-pulse">{'.'}</span>
+          <span
+            className="animate-pulse"
+            style={{ animationDelay: '200ms' }}
+          >
+            {'.'}
+          </span>
+          <span
+            className="animate-pulse"
+            style={{ animationDelay: '400ms' }}
+          >
+            {'.'}
+          </span>
+        </span>
+      )}
+    </div>
+  );
+}
+
+function StageIcon({
+  status,
+  isBoot,
+}: {
+  status: StageStatus;
+  isBoot: boolean;
+}) {
+  return (
+    <div className="flex h-4 w-4 shrink-0 items-center justify-center">
+      {status === 'completed' && (
+        <Check
+          className={cn(
+            'h-3.5 w-3.5',
+            isBoot ? 'text-primary' : 'text-destructive',
+          )}
+        />
+      )}
+      {status === 'in_progress' && (
+        <Loader2
+          className={cn(
+            'h-3.5 w-3.5 animate-spin',
+            isBoot ? 'text-primary' : 'text-destructive',
+          )}
+        />
+      )}
+      {status === 'pending' && (
+        <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/30" />
+      )}
+      {status === 'failed' && (
+        <X className="h-3.5 w-3.5 text-destructive" />
+      )}
     </div>
   );
 }
