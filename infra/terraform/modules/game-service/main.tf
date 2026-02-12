@@ -21,19 +21,24 @@ locals {
   service_name_tag = "${local.name_prefix}-${var.game_instance_id}-instance"
   container_definitions = concat(
     [
-      {
-        name              = var.game_instance_id
-        image             = var.container_image
-        essential         = true
-        memoryReservation = var.container_memory_reservation
-        portMappings = [
-          {
-            containerPort = var.container_port
-            hostPort      = var.host_port
-            protocol      = "tcp"
-          }
-        ]
-      }
+      merge(
+        {
+          name              = var.game_instance_id
+          image             = var.container_image
+          essential         = true
+          memoryReservation = var.container_memory_reservation
+          portMappings = [
+            {
+              containerPort = var.container_port
+              hostPort      = var.host_port
+              protocol      = "tcp"
+            }
+          ]
+        },
+        var.container_command == null ? {} : {
+          command = var.container_command
+        }
+      )
     ],
     local.health_sidecar_enabled ? [
       {
@@ -41,6 +46,18 @@ locals {
         image             = var.health_sidecar_image
         essential         = false
         memoryReservation = 32
+        command = [
+          "sh",
+          "-c",
+          "mkdir -p /www && echo ok >/www/ping && exec httpd -f -p 8080 -h /www"
+        ]
+        healthCheck = {
+          command     = ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8080/ping >/dev/null || exit 1"]
+          interval    = 30
+          timeout     = 5
+          retries     = 3
+          startPeriod = 10
+        }
         portMappings = [
           {
             containerPort = 8080

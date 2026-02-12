@@ -270,7 +270,7 @@ export class StatusService {
       checks.push({
         name: 'DNS',
         status: 'healthy',
-        detail: 'Not configured (using direct host)',
+        detail: 'DNS not configured (direct host/IP mode)',
       });
     }
 

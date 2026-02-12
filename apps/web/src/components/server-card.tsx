@@ -306,7 +306,7 @@ function StatusBadge({
       <HoverCardContent
         side="bottom"
         align="end"
-        className="w-64 p-0"
+        className="w-[min(92vw,30rem)] max-w-[30rem] p-0"
         sideOffset={8}
       >
         <div className="border-b border-border px-3 py-2.5">
@@ -323,9 +323,9 @@ function StatusBadge({
             return (
               <div
                 key={check.name}
-                className="flex items-center justify-between px-3 py-2"
+                className="flex items-start justify-between gap-2 px-3 py-2"
               >
-                <div className="flex min-w-0 items-center gap-2">
+                <div className="flex min-w-0 items-start gap-2">
                   <Icon
                     className={cn(
                       'h-3.5 w-3.5 shrink-0',
@@ -337,7 +337,7 @@ function StatusBadge({
                   </span>
                 </div>
                 {check.detail && (
-                  <span className="ml-2 shrink-0 font-mono text-[11px] text-muted-foreground">
+                  <span className="min-w-0 max-w-[18rem] text-right font-mono text-[11px] leading-tight text-muted-foreground break-words">
                     {check.detail}
                   </span>
                 )}

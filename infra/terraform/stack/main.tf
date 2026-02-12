@@ -52,7 +52,7 @@ module "platform" {
   tags                = var.tags
 }
 
-module "game_service" {
+  module "game_service" {
   for_each = var.game_instances
   source   = "../modules/game-service"
 
@@ -63,8 +63,9 @@ module "game_service" {
   vpc_id                          = module.platform.vpc_id
   ecs_cluster_arn                 = module.platform.ecs_cluster_arn
   public_subnet_ids               = module.platform.public_subnet_ids
-  container_image                 = each.value.container_image
-  container_port                  = each.value.host_port
+    container_image                 = each.value.container_image
+    container_command               = try(each.value.container_command, null)
+    container_port                  = each.value.host_port
   host_port                       = each.value.host_port
   health_port                     = local.shared_health_port
   instance_type                   = each.value.instance_type

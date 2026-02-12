@@ -88,6 +88,7 @@ make tf-plan TF_VARS_FILE=staging.tfvars
 Each `game_instances.<id>` entry supports:
 
 - `game_type` (`minecraft`, `zomboid`, or `generic`)
+- `container_command` (optional): command override for the primary game container
 - `display_name` (optional): UI display name (defaults to instance id)
 - `game_label` (optional): UI label override (defaults from `game_type`)
 - `location` (optional): UI location label (defaults to uppercased AWS region)
@@ -100,7 +101,7 @@ Each `game_instances.<id>` entry supports:
 Behavior enforced by stack wiring:
 
 - `health_port` is fixed to `8080` across all servers.
-- `shared_health_sidecar_image` is shared by all servers in the stack.
+- `shared_health_sidecar_image` is shared by all servers in the stack (default: BusyBox `uclibc` image pinned by digest).
 - `platform_route53_zone_id` is shared by all servers in the stack.
 - `instance_count` and `task_count` are always `1`.
 - `container_port` is always equal to `host_port`.
@@ -110,6 +111,8 @@ When `health_sidecar_image` is set, Terraform adds:
 
 - A second ECS container (`health-sidecar`) in the task definition
 - Security group ingress for `health_port` for `allowed_ingress_cidrs`
+- Sidecar command that serves `GET /ping` on port `8080`
+- ECS container health check using `wget` against `http://127.0.0.1:8080/ping`
 
 API wiring for service/asg names and per-instance config is derived automatically from `game_instances`.
 

@@ -38,6 +38,12 @@ variable "container_image" {
   type        = string
 }
 
+variable "container_command" {
+  description = "Optional container command override for the game service"
+  type        = list(string)
+  default     = null
+}
+
 variable "container_port" {
   description = "Container port exposed by the service"
   type        = number

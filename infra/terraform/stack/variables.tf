@@ -178,9 +178,9 @@ variable "api_alarm_concurrency_threshold" {
 }
 
 variable "shared_health_sidecar_image" {
-  description = "Optional shared health sidecar image used by all game instances"
+  description = "Shared health sidecar image used by all game instances"
   type        = string
-  default     = null
+  default     = "public.ecr.aws/docker/library/busybox@sha256:68fb61caa577f233800d50bef8fe0ee1235ed56a641178783032935223630576"
 }
 
 variable "game_instances" {
@@ -188,6 +188,7 @@ variable "game_instances" {
   type = map(object({
     template_id                  = string
     container_image              = string
+    container_command            = optional(list(string))
     host_port                    = optional(number, 80)
     game_type                    = optional(string, "minecraft")
     display_name                 = optional(string)

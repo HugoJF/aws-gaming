@@ -13,6 +13,7 @@ Last updated: 2026-02-12
 - [ ] Tighten remaining API Lambda IAM wildcard permissions where practical.
 - [ ] Add alarms for Lambda errors and elevated duration.
 - [ ] Add alarms for ECS service health mismatch (`runningCount < desiredCount`) and ASG unhealthy instances.
+- [ ] Use ECS service health status directly in the API health-check list output.
 - [ ] Adopt TanStack Query in web app so PATCH/POST mutations invalidate and refresh relevant lists, and recent data is reused when switching between server/admin views instead of refetching immediately.
 
 ## Low Priority
