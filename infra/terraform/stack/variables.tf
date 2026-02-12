@@ -177,6 +177,12 @@ variable "api_alarm_concurrency_threshold" {
   default     = 20
 }
 
+variable "game_log_retention_days" {
+  description = "CloudWatch log retention (days) for game container logs"
+  type        = number
+  default     = 14
+}
+
 variable "shared_health_sidecar_image" {
   description = "Shared health sidecar image used by all game instances"
   type        = string

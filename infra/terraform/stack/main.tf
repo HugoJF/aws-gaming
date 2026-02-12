@@ -74,6 +74,7 @@ module "game_service" {
   instance_count                  = 1
   task_count                      = 1
   container_memory_reservation    = each.value.container_memory_reservation
+  log_retention_days              = var.game_log_retention_days
   health_sidecar_image            = var.shared_health_sidecar_image
   ecs_optimized_ami_ssm_parameter = each.value.ecs_optimized_ami_ssm_path
   ssh_key_name                    = try(each.value.ssh_key_name, null)

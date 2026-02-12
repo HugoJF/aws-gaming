@@ -2,6 +2,8 @@ data "aws_ssm_parameter" "ecs_ami" {
   name = var.ecs_optimized_ami_ssm_parameter
 }
 
+data "aws_region" "current" {}
+
 locals {
   name_prefix            = "${var.project_name}-${var.environment}"
   ecs_service_name       = "${local.name_prefix}-${var.game_instance_id}"
@@ -55,6 +57,16 @@ locals {
             retries     = var.container_health_check.retries
             startPeriod = var.container_health_check.start_period
           }
+        },
+        {
+          logConfiguration = {
+            logDriver = "awslogs"
+            options = {
+              "awslogs-group"         = aws_cloudwatch_log_group.containers.name
+              "awslogs-region"        = data.aws_region.current.name
+              "awslogs-stream-prefix" = var.game_instance_id
+            }
+          }
         }
       )
     ],
@@ -83,9 +95,24 @@ locals {
             protocol      = "tcp"
           }
         ]
+        logConfiguration = {
+          logDriver = "awslogs"
+          options = {
+            "awslogs-group"         = aws_cloudwatch_log_group.containers.name
+            "awslogs-region"        = data.aws_region.current.name
+            "awslogs-stream-prefix" = "health-sidecar"
+          }
+        }
       }
     ] : []
   )
+}
+
+resource "aws_cloudwatch_log_group" "containers" {
+  name              = "/ecs/${local.name_prefix}-${var.game_instance_id}"
+  retention_in_days = var.log_retention_days
+
+  tags = local.base_tags
 }
 
 resource "aws_security_group" "instance" {

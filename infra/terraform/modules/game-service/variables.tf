@@ -146,6 +146,12 @@ variable "route53_zone_id" {
   default     = null
 }
 
+variable "log_retention_days" {
+  description = "CloudWatch log retention (days) for game container logs"
+  type        = number
+  default     = 14
+}
+
 variable "health_sidecar_image" {
   description = "Optional health sidecar container image. If null, no sidecar container is deployed."
   type        = string

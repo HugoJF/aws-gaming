@@ -8,6 +8,8 @@ Last updated: 2026-02-12
 - [ ] Wire alarm actions (SNS or incident channel) so suspicious traffic patterns page the team.
 - [ ] Migrate EFS to One Zone for game workloads now (cost-optimized; avoid later migration overhead; acceptable risk of data loss on AZ-level failure; verify ECS/EC2 placement is pinned to the same AZ as EFS mount target).
 - [x] Add capacity-provider-based ECS service placement to ensure each service targets its intended EC2 capacity in a shared cluster.
+- [ ] Split boot `game_ready` into explicit stages: waiting for task health (`HEALTHY`), then waiting for DNS propagation, then waiting for GameDig response.
+- [x] Add `awslogs` log driver configuration to game and sidecar containers.
 
 ## Medium Priority
 
