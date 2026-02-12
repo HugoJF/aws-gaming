@@ -228,7 +228,7 @@ function StatusBadge({
   overallHealth?: HealthCheckStatus;
   lastUpdatedAt?: string;
 }) {
-  const relativeTime = useRelativeTime(lastUpdatedAt ?? null);
+  const relativeTime = useRelativeTime(lastUpdatedAt);
   const hasChecks =
     (status === 'online' || status === 'offline' || status === 'error') &&
     healthChecks &&

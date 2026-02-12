@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import type { AdminInstanceView, AdminTokenView } from '@aws-gaming/contracts';
-import type { UpdateTokenInput } from '@/hooks/use-admin-tokens';
+import type { UpdateTokenInput } from '@/hooks/use-token-mutations';
 
 const EXPIRY_PRESETS: readonly { label: string; days: number | null }[] = [
   { label: '7 days', days: 7 },

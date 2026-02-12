@@ -1,7 +1,11 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAdminTokens } from '@/hooks/use-admin-tokens';
+import { useAdminTokensQuery } from '@/hooks/use-admin-tokens-query';
+import { useTokenMutations } from '@/hooks/use-token-mutations';
+import { useAdminServersQuery } from '@/hooks/use-admin-servers-query';
+import { ApiError } from '@/lib/api';
 import { TokenList } from './token-list';
 import { InstanceList } from './instance-list';
 
@@ -12,19 +16,34 @@ interface AdminViewProps {
 }
 
 export function AdminView({ token }: AdminViewProps) {
+  const qc = useQueryClient();
   const [tab, setTab] = useState<AdminTab>('tokens');
   const {
     tokens,
-    instances,
+    loading: tokensLoading,
+    error: tokensError,
+  } = useAdminTokensQuery({ token });
+  const {
     lastCreated,
-    loading,
-    error,
+    error: mutationsError,
     create,
     update,
     revoke,
     dismissCreatedBanner,
-    refresh,
-  } = useAdminTokens({ token });
+  } = useTokenMutations({ token });
+  const {
+    servers: instances,
+    loading: serversLoading,
+    error: serversError,
+  } = useAdminServersQuery({ token });
+
+  const loading = tokensLoading || serversLoading;
+  const errorSource = tokensError ?? serversError ?? mutationsError;
+  const error = errorSource
+    ? errorSource instanceof ApiError
+      ? errorSource.body.error
+      : errorSource.message
+    : null;
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
@@ -52,7 +71,7 @@ export function AdminView({ token }: AdminViewProps) {
         <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4">
           <p className="text-sm text-destructive">{error}</p>
           <button
-            onClick={() => void refresh()}
+            onClick={() => void qc.invalidateQueries({ queryKey: ['admin', token] })}
             className="mt-3 rounded-md border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
             Retry

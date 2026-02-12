@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Check, Copy, X } from 'lucide-react';
-import type { CreateTokenResult } from '@/hooks/use-admin-tokens';
+import type { CreateTokenResult } from '@/hooks/use-token-mutations';
 
 interface TokenCreatedBannerProps {
   result: CreateTokenResult;

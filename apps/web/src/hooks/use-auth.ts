@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 
 const STORAGE_KEY = 'serverdeck_token';
 const TOKEN_PREFIX = '/t/';
-const NAV_EVENT = 'serverdeck:navigate';
 
 function extractTokenFromUrl(): string | null {
   const path = window.location.pathname;
@@ -15,10 +14,8 @@ function syncUrlToToken(token: string | null) {
   const current = extractTokenFromUrl();
   if (token && current !== token) {
     window.history.replaceState(null, '', `${TOKEN_PREFIX}${token}`);
-    window.dispatchEvent(new Event(NAV_EVENT));
   } else if (!token && current) {
     window.history.replaceState(null, '', '/');
-    window.dispatchEvent(new Event(NAV_EVENT));
   }
 }
 

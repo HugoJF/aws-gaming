@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { useServerPolling } from '@/hooks/use-server-polling';
+import { useServersQuery } from '@/hooks/use-servers-query';
+import { usePowerMutation } from '@/hooks/use-power-mutation';
 import { useAdminMode } from '@/hooks/use-admin-mode';
 import { DashboardHeader } from '@/components/dashboard-header';
 import { EmptyState } from '@/components/empty-state';
@@ -8,21 +9,20 @@ import { UnauthedScreen } from '@/components/unauthed-screen';
 import { BootstrapScreen } from '@/components/bootstrap-screen';
 import { ServerCard } from '@/components/server-card';
 import { AdminView } from '@/components/admin/admin-view';
+import { ApiError } from '@/lib/api';
 import { Loader2 } from 'lucide-react';
 
 const BOOTSTRAP_DONE_KEY = 'serverdeck_bootstrap_not_needed';
-const NAV_EVENT = 'serverdeck:navigate';
 
 export function App() {
   const { token, isAuthenticated, login, logout } = useAuth();
   const [authError, setAuthError] = useState<string | null>(null);
-  const [pathVersion, setPathVersion] = useState(0);
   const [skipBootstrapCheck, setSkipBootstrapCheck] = useState(() =>
     localStorage.getItem(BOOTSTRAP_DONE_KEY) === '1',
   );
-  const { isAdmin, currentView, setCurrentView } = useAdminMode(token);
-  const pathname = window.location.pathname;
-  const isBootstrapRoute = pathname === '/bootstrap';
+  const { isAdmin } = useAdminMode(token);
+  const [currentView, setCurrentView] = useState<'servers' | 'admin'>('servers');
+  const showBootstrap = !isAuthenticated && !skipBootstrapCheck;
 
   const handleAuthError = useCallback((message?: string) => {
     setAuthError(message ?? 'Session expired. Please enter your access token again.');
@@ -34,58 +34,44 @@ export function App() {
     login(nextToken);
   }, [login]);
 
-  const replacePath = useCallback((nextPath: string) => {
-    if (window.location.pathname === nextPath) return;
-    window.history.replaceState(null, '', nextPath);
-    window.dispatchEvent(new Event(NAV_EVENT));
-  }, []);
-
   const markBootstrapAsComplete = useCallback(() => {
     localStorage.setItem(BOOTSTRAP_DONE_KEY, '1');
     setSkipBootstrapCheck(true);
   }, []);
 
   useEffect(() => {
-    const rerenderForPathChange = () => setPathVersion((v) => v + 1);
-    window.addEventListener('popstate', rerenderForPathChange);
-    window.addEventListener(NAV_EVENT, rerenderForPathChange);
-    return () => {
-      window.removeEventListener('popstate', rerenderForPathChange);
-      window.removeEventListener(NAV_EVENT, rerenderForPathChange);
-    };
-  }, []);
+    const path = showBootstrap ? '/bootstrap' : '/';
+    if (window.location.pathname !== path) {
+      window.history.replaceState(null, '', path);
+    }
+  }, [showBootstrap]);
+
+  const { servers, loading, error: queryError } = useServersQuery(token);
+  const { togglePower, error: mutationError } = usePowerMutation(token);
+
+  const errorSource = queryError ?? mutationError;
+  const isAuthError =
+    errorSource instanceof ApiError &&
+    (errorSource.status === 401 || errorSource.status === 403);
 
   useEffect(() => {
-    if (isAuthenticated) return;
-    if (!skipBootstrapCheck && pathname === '/') {
-      replacePath('/bootstrap');
-      return;
-    }
-    if (skipBootstrapCheck && isBootstrapRoute) {
-      replacePath('/');
-    }
-  }, [isAuthenticated, isBootstrapRoute, pathname, replacePath, skipBootstrapCheck]);
+    if (isAuthError) handleAuthError((errorSource as ApiError).body.error);
+  }, [isAuthError, errorSource, handleAuthError]);
 
-  void pathVersion;
-
-  const { servers, loading, error, togglePower } = useServerPolling({
-    token,
-    onAuthError: handleAuthError,
-  });
+  const error =
+    errorSource && !isAuthError
+      ? errorSource instanceof ApiError
+        ? errorSource.body.error
+        : errorSource.message
+      : null;
 
   if (!isAuthenticated) {
-    if (!skipBootstrapCheck && pathname === '/') {
-      return null;
-    }
-    if (isBootstrapRoute && !skipBootstrapCheck) {
+    if (showBootstrap) {
       return (
         <BootstrapScreen
           onTokenSubmit={handleTokenSubmit}
           onBootstrapCompleted={markBootstrapAsComplete}
-          onBootstrapUnavailable={() => {
-            markBootstrapAsComplete();
-            replacePath('/');
-          }}
+          onBootstrapUnavailable={markBootstrapAsComplete}
           authError={authError}
           onDismissAuthError={() => setAuthError(null)}
         />

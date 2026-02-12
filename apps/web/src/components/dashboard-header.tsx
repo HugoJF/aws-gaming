@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
-import type { AdminView } from '@/hooks/use-admin-mode';
+
+type AdminView = 'servers' | 'admin';
 
 interface DashboardHeaderProps {
   serverCount: number;
