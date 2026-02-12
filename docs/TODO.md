@@ -19,6 +19,7 @@ Last updated: 2026-02-12
 - [ ] Split large React Query hooks into focused query/mutation hooks and smaller files (avoid monolithic `useQuery`+`useMutation` hooks).
 - [ ] Revisit Bootstrap screen code after TanStack Query integration; simplify flow and split logic into smaller maintainable pieces (code quality, not visual redesign).
 - [ ] Remove Terraform configurability for `function_url_auth_type`; hardcode API Function URL auth type to `NONE`.
+- [ ] Fix `GET https://minecraft.aws.hugo.dev.br:8080/ping` failing with `net::ERR_SSL_PROTOCOL_ERROR`.
 
 ## Low Priority
 
