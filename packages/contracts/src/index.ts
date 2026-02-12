@@ -294,18 +294,18 @@ export interface DynamoEntity {
 /* ------------------------------------------------------------------ */
 
 export const BOOT_STAGES: readonly { id: BootStageId; label: string }[] = [
-  { id: 'scaling', label: 'Scaling infrastructure' },
-  { id: 'registering', label: 'Registering to cluster' },
-  { id: 'starting', label: 'Starting containers' },
-  { id: 'dns_update', label: 'Updating DNS' },
-  { id: 'game_ready', label: 'Waiting for game' },
-  { id: 'ready', label: 'Server ready' },
+  { id: 'scaling', label: 'Scaling EC2 Auto Scaling Group up' },
+  { id: 'registering', label: 'Registering EC2 instance with ECS cluster' },
+  { id: 'starting', label: 'Starting ECS service tasks' },
+  { id: 'dns_update', label: 'Updating Route53 DNS record' },
+  { id: 'game_ready', label: 'Waiting for game process health' },
+  { id: 'ready', label: 'Server ready for players' },
 ] as const;
 
 export const SHUTDOWN_STAGES: readonly { id: ShutdownStageId; label: string }[] = [
-  { id: 'stopping', label: 'Stopping containers' },
-  { id: 'dns_clear', label: 'Clearing DNS' },
-  { id: 'draining', label: 'Draining instance' },
-  { id: 'scaling_down', label: 'Scaling down' },
-  { id: 'stopped', label: 'Server stopped' },
+  { id: 'stopping', label: 'Stopping ECS service tasks' },
+  { id: 'dns_clear', label: 'Removing Route53 DNS record' },
+  { id: 'scaling_down', label: 'Scaling EC2 Auto Scaling Group to zero' },
+  { id: 'draining', label: 'Waiting for Auto Scaling Group drain' },
+  { id: 'stopped', label: 'Server fully offline' },
 ] as const;
