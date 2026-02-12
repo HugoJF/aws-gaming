@@ -5,7 +5,6 @@ import {
   PutCommand,
   DeleteCommand,
   ScanCommand,
-  UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import type {
   GameTemplate,
@@ -105,21 +104,6 @@ export class Repository {
           entityType: 'GameInstance',
           ...instance,
         },
-      }),
-    );
-  }
-
-  async updateInstanceState(
-    id: string,
-    state: GameInstance['state'],
-  ): Promise<void> {
-    await this.doc.send(
-      new UpdateCommand({
-        TableName: this.tableName,
-        Key: { pk: `INSTANCE#${id}`, sk: 'INSTANCE' },
-        UpdateExpression: 'SET #s = :s',
-        ExpressionAttributeNames: { '#s': 'state' },
-        ExpressionAttributeValues: { ':s': state },
       }),
     );
   }
@@ -255,19 +239,29 @@ export class Repository {
   }
 
   async getTokenById(id: string): Promise<SecretAccessToken | null> {
-    const res = await this.doc.send(
-      new ScanCommand({
-        TableName: this.tableName,
-        FilterExpression: 'entityType = :et AND id = :id',
-        ExpressionAttributeValues: {
-          ':et': 'SecretAccessToken',
-          ':id': id,
-        },
-        Limit: 1,
-      }),
-    );
+    let startKey: Record<string, unknown> | undefined;
 
-    return (res.Items?.[0] as SecretAccessToken | undefined) ?? null;
+    do {
+      const res = await this.doc.send(
+        new ScanCommand({
+          TableName: this.tableName,
+          FilterExpression: 'entityType = :et AND id = :id',
+          ExpressionAttributeValues: {
+            ':et': 'SecretAccessToken',
+            ':id': id,
+          },
+          ExclusiveStartKey: startKey,
+          ConsistentRead: true,
+        }),
+      );
+
+      const match = res.Items?.[0] as SecretAccessToken | undefined;
+      if (match) return match;
+
+      startKey = res.LastEvaluatedKey as Record<string, unknown> | undefined;
+    } while (startKey);
+
+    return null;
   }
 
   async updateTokenByHash(
