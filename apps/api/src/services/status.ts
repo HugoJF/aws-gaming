@@ -27,12 +27,10 @@ const STAGE_TIMEOUT_MS: Partial<Record<string, number>> = {
   starting: 60_000,
   dns_update: 30_000,
   game_ready: 120_000,
-  ready: 5_000,
-  stopping: 60_000,
-  dns_clear: 10_000,
-  draining: 30_000,
-  scaling_down: 120_000,
-  stopped: 5_000,
+  stopping: 120_000,
+  dns_clear: 30_000,
+  scaling_down: 60_000,
+  draining: 180_000,
 };
 
 export class StatusService {
@@ -46,19 +44,28 @@ export class StatusService {
 
   /** Build full ServerView for a single instance, using cache when fresh */
   async buildServerView(instance: GameInstance): Promise<ServerView> {
-    // Check cache first
-    const cached = await this.repo.getCachedStatus(instance.id);
-    if (cached) {
-      return this.toServerView(instance, cached);
+    let powerAction = await this.repo.getPowerAction(instance.id);
+
+    // Use cache only when no transition is in progress.
+    if (!powerAction) {
+      const cached = await this.repo.getCachedStatus(instance.id);
+      if (cached) {
+        return this.toServerView(instance, cached, null);
+      }
     }
 
     // Fetch fresh status
-    const freshStatus = await this.fetchFreshStatus(instance);
+    let freshStatus = await this.fetchFreshStatus(instance, powerAction);
 
     // Advance power action if one is in progress
-    const powerAction = await this.repo.getPowerAction(instance.id);
     if (powerAction) {
-      await this.advancePowerAction(instance, powerAction, freshStatus);
+      await this.advancePowerAction(instance, powerAction);
+      powerAction = await this.repo.getPowerAction(instance.id);
+
+      // If transition finalized during this poll, refresh status without transitional override.
+      if (!powerAction) {
+        freshStatus = await this.fetchFreshStatus(instance, null);
+      }
     }
 
     // Cache the result
@@ -70,6 +77,7 @@ export class StatusService {
   /** Fetch live status from AWS APIs + GameDig */
   private async fetchFreshStatus(
     instance: GameInstance,
+    powerAction: PowerAction | null = null,
   ): Promise<CachedServerStatus> {
     const [asgStatus, ecsStatus] = await Promise.all([
       this.asg.describe(instance.autoScalingGroupName).catch(() => null),
@@ -89,9 +97,12 @@ export class StatusService {
     }
 
     // Preserve booting/shutting-down if a power action is in progress
-    const powerAction = await this.repo.getPowerAction(instance.id);
     if (powerAction) {
-      status = powerAction.action === 'on' ? 'booting' : 'shutting-down';
+      status = this.hasFailedStage(powerAction)
+        ? 'error'
+        : powerAction.action === 'on'
+          ? 'booting'
+          : 'shutting-down';
     }
 
     const publicIp = await this.resolvePublicIp(asgStatus);
@@ -365,7 +376,6 @@ export class StatusService {
   async advancePowerAction(
     instance: GameInstance,
     action: PowerAction,
-    freshStatus: CachedServerStatus,
   ): Promise<void> {
     const now = new Date();
 
@@ -378,7 +388,39 @@ export class StatusService {
     const currentStage = action.stages.find(
       (s) => s.id === action.currentStageId,
     );
-    if (!currentStage || currentStage.status !== 'in_progress') return;
+    if (!currentStage) return;
+
+    // Recover from legacy failures on terminal stages caused by short timeout + slow poll.
+    if (currentStage.status === 'failed') {
+      const isTerminal =
+        currentStage.id === 'ready' || currentStage.id === 'stopped';
+      if (isTerminal) {
+        const conditionMet = await this.checkStageCondition(
+          instance,
+          action,
+          currentStage.id,
+        );
+        if (conditionMet) {
+          await this.repo.deletePowerAction(instance.id);
+        }
+      }
+      return;
+    }
+
+    if (currentStage.status !== 'in_progress') return;
+
+    // Check if current stage condition is met.
+    // We do this before timeout checks to avoid false failures when polling is delayed.
+    const conditionMet = await this.checkStageCondition(
+      instance,
+      action,
+      currentStage.id,
+    );
+
+    if (conditionMet) {
+      await this.completeStageAndAdvance(instance, action);
+      return;
+    }
 
     // Check individual stage timeout
     if (currentStage.startedAt) {
@@ -394,16 +436,6 @@ export class StatusService {
       }
     }
 
-    // Check if current stage condition is met
-    const conditionMet = await this.checkStageCondition(
-      instance,
-      action,
-      currentStage.id,
-    );
-
-    if (conditionMet) {
-      await this.completeStageAndAdvance(instance, action);
-    }
   }
 
   private async checkStageCondition(
@@ -498,23 +530,33 @@ export class StatusService {
       case 'dns_clear': {
         if (!instance.dnsName || !instance.route53ZoneId) return true;
         await this.dns.deleteARecord(instance.route53ZoneId, instance.dnsName);
-        return true;
-      }
-      case 'draining': {
-        const ecsStatus = await this.ecs.describe(
-          instance.ecsClusterArn,
-          instance.ecsServiceName,
+        return this.dns.verifyRecordDeleted(
+          instance.route53ZoneId,
+          instance.dnsName,
         );
-        return ecsStatus.containerInstanceCount === 0 || ecsStatus.runningCount === 0;
       }
       case 'scaling_down': {
         await this.asg.scaleDown(instance.autoScalingGroupName);
         const asgStatus = await this.asg.describe(instance.autoScalingGroupName);
-        return this.asg.isEmpty(asgStatus);
+        return asgStatus.desiredCapacity === 0 && asgStatus.minSize === 0;
+      }
+      case 'draining': {
+        const [ecsStatus, asgStatus] = await Promise.all([
+          this.ecs.describe(
+            instance.ecsClusterArn,
+            instance.ecsServiceName,
+          ),
+          this.asg.describe(instance.autoScalingGroupName),
+        ]);
+        return ecsStatus.containerInstanceCount === 0 && this.asg.isEmpty(asgStatus);
       }
       case 'stopped':
         return true;
     }
+  }
+
+  private hasFailedStage(action: PowerAction): boolean {
+    return action.stages.some((stage) => stage.status === 'failed');
   }
 
   private async completeStageAndAdvance(

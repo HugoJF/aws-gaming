@@ -103,4 +103,10 @@ export class DnsControl {
     const state = await this.getARecord(zoneId, dnsName);
     return state.exists && state.currentIp === expectedIp;
   }
+
+  /** Verify that no A record exists for this DNS name */
+  async verifyRecordDeleted(zoneId: string, dnsName: string): Promise<boolean> {
+    const state = await this.getARecord(zoneId, dnsName);
+    return !state.exists;
+  }
 }
