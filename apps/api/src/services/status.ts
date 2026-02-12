@@ -25,6 +25,7 @@ const STAGE_TIMEOUT_MS: Partial<Record<string, number>> = {
   scaling: 180_000,
   registering: 60_000,
   starting: 60_000,
+  task_healthy: 120_000,
   dns_update: 30_000,
   game_ready: 120_000,
   stopping: 120_000,
@@ -515,6 +516,16 @@ export class StatusService {
           instance.ecsServiceName,
         );
         return this.ecs.isRunning(ecsStatus);
+      }
+      case 'task_healthy': {
+        const ecsStatus = await this.ecs.describe(
+          instance.ecsClusterArn,
+          instance.ecsServiceName,
+        );
+        return (
+          ecsStatus.desiredCount > 0 &&
+          ecsStatus.healthyTaskCount >= ecsStatus.desiredCount
+        );
       }
       case 'dns_update': {
         if (!instance.dnsName || !instance.route53ZoneId) return true;

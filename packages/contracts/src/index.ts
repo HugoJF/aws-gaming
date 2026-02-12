@@ -38,6 +38,7 @@ export type BootStageId =
   | 'scaling'
   | 'registering'
   | 'starting'
+  | 'task_healthy'
   | 'dns_update'
   | 'game_ready'
   | 'ready';
@@ -305,8 +306,9 @@ export const BOOT_STAGES: readonly { id: BootStageId; label: string }[] = [
   { id: 'scaling', label: 'Scaling EC2 Auto Scaling Group up' },
   { id: 'registering', label: 'Registering EC2 instance with ECS cluster' },
   { id: 'starting', label: 'Starting ECS service tasks' },
+  { id: 'task_healthy', label: 'Waiting for container health check' },
   { id: 'dns_update', label: 'Updating Route53 DNS record' },
-  { id: 'game_ready', label: 'Waiting for game process health' },
+  { id: 'game_ready', label: 'Waiting for game query response' },
   { id: 'ready', label: 'Server ready for players' },
 ] as const;
 
