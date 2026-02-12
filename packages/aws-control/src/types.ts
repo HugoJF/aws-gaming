@@ -16,6 +16,9 @@ export interface EcsStatus {
   runningCount: number;
   pendingCount: number;
   containerInstanceCount: number;
+  healthyTaskCount: number;
+  unhealthyTaskCount: number;
+  unknownHealthTaskCount: number;
 }
 
 export interface Ec2InstanceInfo {

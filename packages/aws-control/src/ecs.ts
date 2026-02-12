@@ -1,6 +1,8 @@
 import {
   ECSClient,
   DescribeServicesCommand,
+  DescribeTasksCommand,
+  ListTasksCommand,
   UpdateServiceCommand,
   ListContainerInstancesCommand,
 } from '@aws-sdk/client-ecs';
@@ -30,11 +32,44 @@ export class EcsControl {
       new ListContainerInstancesCommand({ cluster: clusterArn }),
     );
 
+    const runningTaskArns = (
+      await this.client.send(
+        new ListTasksCommand({
+          cluster: clusterArn,
+          serviceName,
+          desiredStatus: 'RUNNING',
+        }),
+      )
+    ).taskArns ?? [];
+
+    let healthyTaskCount = 0;
+    let unhealthyTaskCount = 0;
+    let unknownHealthTaskCount = 0;
+
+    if (runningTaskArns.length > 0) {
+      const tasksRes = await this.client.send(
+        new DescribeTasksCommand({
+          cluster: clusterArn,
+          tasks: runningTaskArns,
+        }),
+      );
+
+      for (const task of tasksRes.tasks ?? []) {
+        const health = task.healthStatus ?? 'UNKNOWN';
+        if (health === 'HEALTHY') healthyTaskCount += 1;
+        else if (health === 'UNHEALTHY') unhealthyTaskCount += 1;
+        else unknownHealthTaskCount += 1;
+      }
+    }
+
     return {
       desiredCount: svc.desiredCount ?? 0,
       runningCount: svc.runningCount ?? 0,
       pendingCount: svc.pendingCount ?? 0,
       containerInstanceCount: ciRes.containerInstanceArns?.length ?? 0,
+      healthyTaskCount,
+      unhealthyTaskCount,
+      unknownHealthTaskCount,
     };
   }
 

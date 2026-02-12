@@ -207,7 +207,7 @@ export interface AdminTokenView {
   isAdmin?: boolean;
 }
 
-export interface AdminInstanceView {
+export interface AdminServerView {
   id: string;
   displayName: string;
   game: GameType;
@@ -217,6 +217,9 @@ export interface AdminInstanceView {
   address: string;
   maxPlayers: number;
 }
+
+/** @deprecated Use AdminServerView */
+export type AdminInstanceView = AdminServerView;
 
 export interface MeResponse {
   tokenId: string;
@@ -255,6 +258,11 @@ export interface AdminRevokeTokenResponse {
   token: AdminTokenView;
 }
 
+export interface AdminListServersResponse {
+  servers: AdminServerView[];
+}
+
+/** @deprecated Use AdminListServersResponse */
 export interface AdminListInstancesResponse {
   instances: AdminInstanceView[];
 }
