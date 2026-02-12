@@ -10,6 +10,7 @@ import type {
   AdminUpdateTokenRequest,
   AdminUpdateTokenResponse,
   AdminRevokeTokenResponse,
+  AdminListServersResponse,
   AdminListInstancesResponse,
   BootstrapStatusResponse,
   BootstrapCreateAdminRequest,
@@ -121,6 +122,11 @@ export const api = {
     });
   },
 
+  adminListServers(token: string) {
+    return request<AdminListServersResponse>('/api/admin/servers', token);
+  },
+
+  /** @deprecated Use adminListServers */
   adminListInstances(token: string) {
     return request<AdminListInstancesResponse>('/api/admin/instances', token);
   },

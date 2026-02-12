@@ -69,6 +69,7 @@ export function EditTokenDialog({
     });
   }
 
+  // TODO we are tracking error/loading manually, this should probably be using TanStack Query
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!label.trim() || selectedIds.size === 0 || submitting) return;

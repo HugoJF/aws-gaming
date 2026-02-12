@@ -209,7 +209,7 @@ function getBadgeLabel(
   if (status === 'shutting-down') return 'Stopping';
   if (status === 'offline') return 'Offline';
   if (status === 'error') return 'Error';
-  if (!overallHealth || overallHealth === 'healthy') return 'Healthy';
+  if (overallHealth === 'healthy') return 'Healthy';
   if (overallHealth === 'degraded') return 'Degraded';
   if (overallHealth === 'unknown') return 'Unknown';
   return 'Unhealthy';

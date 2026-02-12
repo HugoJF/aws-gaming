@@ -11,6 +11,7 @@ const STATUS_DOT: Record<string, string> = {
 };
 
 interface InstanceListProps {
+  // TODO fix deprecation
   instances: AdminInstanceView[];
 }
 

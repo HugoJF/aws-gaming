@@ -14,6 +14,7 @@ function formatRelative(date: Date): string {
 export function useRelativeTime(date: Date | string | null): string | null {
   const [, tick] = useState(0);
 
+  // TODO this can be rewritten using useInterval
   useEffect(() => {
     if (!date) return;
     const id = setInterval(() => tick((n) => n + 1), 5000);

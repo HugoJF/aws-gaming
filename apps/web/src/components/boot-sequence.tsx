@@ -10,6 +10,7 @@ interface BootSequenceProps {
 }
 
 export function BootSequence({ type, stages }: BootSequenceProps) {
+  // TODO: this is not needed
   if (stages.length === 0) return null;
 
   const isBoot = type === 'boot';

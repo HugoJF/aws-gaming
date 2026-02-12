@@ -1,50 +1,38 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { api, ApiError } from '@/lib/api';
 
 export type AdminView = 'servers' | 'admin';
 
+function meQueryKey(token: string | null) {
+  return ['me', token] as const;
+}
+
 export function useAdminMode(token: string | null) {
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [currentView, setCurrentView] = useState<AdminView>('servers');
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function resolveAdminMode() {
-      if (!token) {
-        setIsAdmin(false);
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
+  const meQuery = useQuery({
+    queryKey: meQueryKey(token),
+    enabled: Boolean(token),
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
+    queryFn: async () => {
+      if (!token) return null;
       try {
-        const me = await api.getMe(token);
-        if (!cancelled) {
-          setIsAdmin(me.isAdmin === true);
-        }
+        return await api.getMe(token);
       } catch (error) {
-        if (!cancelled) {
-          if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
-            setIsAdmin(false);
-          } else {
-            setIsAdmin(false);
-          }
+        if (
+          error instanceof ApiError &&
+          (error.status === 401 || error.status === 403)
+        ) {
+          return null;
         }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        throw error;
       }
-    }
+    },
+  });
 
-    void resolveAdminMode();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
+  const isAdmin = meQuery.data?.isAdmin === true;
 
   useEffect(() => {
     if (!isAdmin && currentView !== 'servers') {
@@ -55,10 +43,10 @@ export function useAdminMode(token: string | null) {
   return useMemo(
     () => ({
       isAdmin,
-      loading,
+      loading: meQuery.isPending,
       currentView: isAdmin ? currentView : ('servers' as const),
       setCurrentView,
     }),
-    [isAdmin, loading, currentView],
+    [isAdmin, meQuery.isPending, currentView],
   );
 }

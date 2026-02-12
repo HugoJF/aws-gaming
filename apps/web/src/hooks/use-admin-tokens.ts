@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
-  AdminInstanceView,
   AdminTokenView,
   AdminCreateTokenRequest,
   AdminUpdateTokenRequest,
@@ -26,122 +26,138 @@ interface UseAdminTokensOptions {
 }
 
 function toErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    return error.body.error;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
+  if (error instanceof ApiError) return error.body.error;
+  if (error instanceof Error) return error.message;
   return 'Unexpected error';
 }
 
+function tokenQueryKey(token: string | null) {
+  return ['admin', token, 'tokens'] as const;
+}
+
+function serverQueryKey(token: string | null) {
+  return ['admin', token, 'servers'] as const;
+}
+
 export function useAdminTokens({ token }: UseAdminTokensOptions) {
-  const [tokens, setTokens] = useState<AdminTokenView[]>([]);
-  const [instances, setInstances] = useState<AdminInstanceView[]>([]);
+  const qc = useQueryClient();
   const [lastCreated, setLastCreated] = useState<CreateTokenResult | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    if (!token) {
-      setTokens([]);
-      setInstances([]);
-      setLoading(false);
-      setError(null);
-      return;
-    }
+  const tokensQuery = useQuery({
+    queryKey: tokenQueryKey(token),
+    enabled: Boolean(token),
+    staleTime: 30_000,
+    gcTime: 10 * 60_000,
+    queryFn: async () => {
+      if (!token) return [];
+      const res = await api.adminListTokens(token);
+      return res.tokens;
+    },
+  });
 
-    setLoading(true);
-    try {
-      const [tokenRes, instanceRes] = await Promise.all([
-        api.adminListTokens(token),
-        api.adminListInstances(token),
-      ]);
-      setTokens(tokenRes.tokens);
-      setInstances(instanceRes.instances);
-      setError(null);
-    } catch (err) {
-      setError(toErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [token]);
+  const serversQuery = useQuery({
+    queryKey: serverQueryKey(token),
+    enabled: Boolean(token),
+    staleTime: 30_000,
+    gcTime: 10 * 60_000,
+    queryFn: async () => {
+      if (!token) return [];
+      const res = await api.adminListServers(token);
+      return res.servers;
+    },
+  });
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  const createMutation = useMutation({
+    mutationFn: async (input: CreateTokenInput) => {
+      if (!token) throw new Error('Missing auth token');
+      return api.adminCreateToken(token, input);
+    },
+    onSuccess: (result) => {
+      setLastCreated({
+        token: result.token,
+        rawToken: result.rawToken,
+        shareUrl: tokenShareUrl(result.rawToken),
+      });
+      void qc.invalidateQueries({ queryKey: tokenQueryKey(token) });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({
+      tokenId,
+      input,
+    }: {
+      tokenId: string;
+      input: UpdateTokenInput;
+    }) => {
+      if (!token) throw new Error('Missing auth token');
+      return api.adminUpdateToken(token, tokenId, input);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: tokenQueryKey(token) });
+    },
+  });
+
+  const revokeMutation = useMutation({
+    mutationFn: async (tokenId: string) => {
+      if (!token) throw new Error('Missing auth token');
+      return api.adminRevokeToken(token, tokenId);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: tokenQueryKey(token) });
+    },
+  });
 
   const create = useCallback(
     async (input: CreateTokenInput) => {
       if (!token) return;
-
-      try {
-        const result = await api.adminCreateToken(token, input);
-        setTokens((prev) => [result.token, ...prev]);
-        setLastCreated({
-          token: result.token,
-          rawToken: result.rawToken,
-          shareUrl: tokenShareUrl(result.rawToken),
-        });
-        setError(null);
-      } catch (err) {
-        setError(toErrorMessage(err));
-        throw err;
-      }
+      await createMutation.mutateAsync(input);
     },
-    [token],
+    [token, createMutation],
   );
 
   const update = useCallback(
     async (tokenId: string, input: UpdateTokenInput) => {
       if (!token) return;
-
-      try {
-        const result = await api.adminUpdateToken(token, tokenId, input);
-        setTokens((prev) =>
-          prev.map((existing) =>
-            existing.id === tokenId ? result.token : existing,
-          ),
-        );
-        setError(null);
-      } catch (err) {
-        setError(toErrorMessage(err));
-        throw err;
-      }
+      await updateMutation.mutateAsync({ tokenId, input });
     },
-    [token],
+    [token, updateMutation],
   );
 
   const revoke = useCallback(
     async (tokenId: string) => {
       if (!token) return;
-
-      try {
-        const result = await api.adminRevokeToken(token, tokenId);
-        setTokens((prev) =>
-          prev.map((existing) =>
-            existing.id === tokenId ? result.token : existing,
-          ),
-        );
-        setError(null);
-      } catch (err) {
-        setError(toErrorMessage(err));
-        throw err;
-      }
+      await revokeMutation.mutateAsync(tokenId);
     },
-    [token],
+    [token, revokeMutation],
   );
 
   const dismissCreatedBanner = useCallback(() => {
     setLastCreated(null);
   }, []);
 
+  const refresh = useCallback(async () => {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: tokenQueryKey(token) }),
+      qc.invalidateQueries({ queryKey: serverQueryKey(token) }),
+    ]);
+  }, [qc, token]);
+
+  const errorSource =
+    tokensQuery.error ??
+    serversQuery.error ??
+    createMutation.error ??
+    updateMutation.error ??
+    revokeMutation.error;
+
   return {
-    tokens,
-    instances,
+    tokens: tokensQuery.data ?? [],
+    instances: serversQuery.data ?? [],
     lastCreated,
-    loading,
-    error,
+    loading:
+      Boolean(token) &&
+      (tokensQuery.isPending || serversQuery.isPending),
+    error: errorSource ? toErrorMessage(errorSource) : null,
     create,
     update,
     revoke,
