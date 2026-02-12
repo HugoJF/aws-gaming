@@ -6,6 +6,14 @@ Opaque token creation/hash/expiry/revocation helpers.
 
 - `packages/auth-links/src/index.ts`
 
+## Token Format
+
+`createOpaqueToken()` returns:
+
+- `<word>-<word>-<random-suffix>`
+
+The random suffix is generated with `randomBytes` and remains the cryptographic entropy source.
+
 ## Commands
 
 ```bash
