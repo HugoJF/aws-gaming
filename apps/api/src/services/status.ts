@@ -107,7 +107,6 @@ export class StatusService {
 
     const publicIp = await this.resolvePublicIp(asgStatus);
     const queryHost = instance.dnsName ?? publicIp;
-
     // GameDig query (skip if ECS has no running tasks)
     let liveData: LiveData | null = null;
     if (
@@ -150,7 +149,7 @@ export class StatusService {
     if (!asgStatus) return null;
     const instanceIds = asgStatus.instances.map((i) => i.instanceId);
     if (instanceIds.length === 0) return null;
-    return this.ec2.getPublicIp(instanceIds);
+    return this.ec2.getPublicIp(instanceIds).catch(() => null);
   }
 
   private buildHealthChecks(
@@ -207,23 +206,55 @@ export class StatusService {
 
     // ECS Task check
     if (ecsStatus) {
-      if (ecsStatus.runningCount >= ecsStatus.desiredCount && ecsStatus.desiredCount > 0) {
+      const healthSummary =
+        ecsStatus.runningCount > 0
+          ? `, task health healthy:${ecsStatus.healthyTaskCount} unhealthy:${ecsStatus.unhealthyTaskCount} unknown:${ecsStatus.unknownHealthTaskCount}`
+          : '';
+
+      if (ecsStatus.desiredCount === 0) {
         checks.push({
           name: 'ECS Task',
-          status: 'healthy',
-          detail: `${ecsStatus.runningCount} running`,
+          status: 'unknown',
+          detail: 'Service scaled to zero',
         });
-      } else if (ecsStatus.runningCount > 0) {
-        checks.push({
-          name: 'ECS Task',
-          status: 'degraded',
-          detail: `${ecsStatus.runningCount}/${ecsStatus.desiredCount} running`,
-        });
-      } else {
+      } else if (ecsStatus.runningCount === 0) {
         checks.push({
           name: 'ECS Task',
           status: 'unhealthy',
           detail: 'No tasks running',
+        });
+      } else if (ecsStatus.unhealthyTaskCount > 0) {
+        checks.push({
+          name: 'ECS Task',
+          status: 'unhealthy',
+          detail: `${ecsStatus.runningCount}/${ecsStatus.desiredCount} running${healthSummary}`,
+        });
+      } else if (
+        ecsStatus.runningCount < ecsStatus.desiredCount ||
+        ecsStatus.pendingCount > 0
+      ) {
+        checks.push({
+          name: 'ECS Task',
+          status: 'degraded',
+          detail: `${ecsStatus.runningCount}/${ecsStatus.desiredCount} running${healthSummary}`,
+        });
+      } else if (ecsStatus.healthyTaskCount > 0) {
+        checks.push({
+          name: 'ECS Task',
+          status: 'healthy',
+          detail: `${ecsStatus.runningCount}/${ecsStatus.desiredCount} running${healthSummary}`,
+        });
+      } else if (ecsStatus.unknownHealthTaskCount > 0) {
+        checks.push({
+          name: 'ECS Task',
+          status: 'unknown',
+          detail: `${ecsStatus.runningCount}/${ecsStatus.desiredCount} running${healthSummary}`,
+        });
+      } else {
+        checks.push({
+          name: 'ECS Task',
+          status: 'healthy',
+          detail: `${ecsStatus.runningCount}/${ecsStatus.desiredCount} running`,
         });
       }
     } else {
@@ -411,11 +442,21 @@ export class StatusService {
 
     // Check if current stage condition is met.
     // We do this before timeout checks to avoid false failures when polling is delayed.
-    const conditionMet = await this.checkStageCondition(
-      instance,
-      action,
-      currentStage.id,
-    );
+    let conditionMet = false;
+    try {
+      conditionMet = await this.checkStageCondition(
+        instance,
+        action,
+        currentStage.id,
+      );
+    } catch (error) {
+      await this.failCurrentStage(
+        instance,
+        action,
+        `Stage check failed: ${this.toErrorMessage(error)}`,
+      );
+      return;
+    }
 
     if (conditionMet) {
       await this.completeStageAndAdvance(instance, action);
@@ -612,4 +653,15 @@ export class StatusService {
 
     await this.repo.putPowerAction(instance.id, action);
   }
+
+  private toErrorMessage(error: unknown): string {
+    if (error instanceof Error) return error.message;
+    if (typeof error === 'string') return error;
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return 'unknown error';
+    }
+  }
+
 }

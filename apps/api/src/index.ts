@@ -12,8 +12,11 @@ import type {
   AdminCreateTokenResponse,
   AdminUpdateTokenResponse,
   AdminRevokeTokenResponse,
+  AdminListServersResponse,
   AdminListInstancesResponse,
   AdminTokenView,
+  PowerAction,
+  ServerView,
   SecretAccessToken,
   BootstrapStatusResponse,
   BootstrapCreateAdminResponse,
@@ -102,6 +105,15 @@ async function canBootstrapAdmin(): Promise<boolean> {
 /* ------------------------------------------------------------------ */
 
 const app = new Hono();
+
+app.onError((err, c) => {
+  console.error('Unhandled API error', {
+    path: c.req.path,
+    method: c.req.method,
+    error: err instanceof Error ? err.message : String(err),
+  });
+  return c.json({ error: 'Internal server error' }, 500);
+});
 
 // Lambda Function URL already applies CORS at the edge.
 // Keep Hono CORS only for non-Lambda local runtime paths.
@@ -222,7 +234,12 @@ api.post('/servers/:id/power', async (c) => {
     return c.json({ error: 'Not authorized for this server' }, 403);
   }
 
-  const body = await c.req.json<PowerRequest>();
+  let body: PowerRequest;
+  try {
+    body = await c.req.json<PowerRequest>();
+  } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
   if (body.action !== 'on' && body.action !== 'off') {
     return c.json({ error: 'Invalid action, must be "on" or "off"' }, 400);
   }
@@ -232,7 +249,17 @@ api.post('/servers/:id/power', async (c) => {
     return c.json({ error: 'Server not found' }, 404);
   }
 
-  const current = await statusService.buildServerView(instance);
+  let current: ServerView;
+  try {
+    current = await statusService.buildServerView(instance);
+  } catch (error) {
+    console.error('Failed to build current server view before power action', {
+      instanceId: id,
+      action: body.action,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return c.json({ error: 'Unable to read current server status' }, 502);
+  }
 
   // Check for conflicting states
   if (body.action === 'on' && current.status === 'online') {
@@ -245,8 +272,29 @@ api.post('/servers/:id/power', async (c) => {
     return c.json({ error: 'Power transition already in progress' }, 409);
   }
 
-  const powerAction = await statusService.startPowerAction(instance, body.action);
-  const view = await statusService.buildServerView(instance);
+  let powerAction: PowerAction;
+  try {
+    powerAction = await statusService.startPowerAction(instance, body.action);
+  } catch (error) {
+    console.error('Failed to start power action', {
+      instanceId: id,
+      action: body.action,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return c.json({ error: 'Failed to start power action' }, 502);
+  }
+
+  let view: ServerView;
+  try {
+    view = await statusService.buildServerView(instance);
+  } catch (error) {
+    console.error('Failed to build server view after power action start', {
+      instanceId: id,
+      action: body.action,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return c.json({ error: 'Power action started, but status refresh failed' }, 502);
+  }
   const transitionalStatus = body.action === 'on' ? 'booting' : 'shutting-down';
 
   return c.json({
@@ -441,7 +489,7 @@ admin.post('/tokens/:id/revoke', async (c) => {
   );
 });
 
-admin.get('/instances', async (c) => {
+async function listAdminServers() {
   const instances = await repo.listInstances();
 
   const views = (await Promise.all(
@@ -461,7 +509,20 @@ admin.get('/instances', async (c) => {
   ))
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
 
-  return c.json({ instances: views } satisfies AdminListInstancesResponse);
+  return views;
+}
+
+admin.get('/servers', async (c) => {
+  return c.json(
+    { servers: await listAdminServers() } satisfies AdminListServersResponse,
+  );
+});
+
+// Backward compatibility for older clients.
+admin.get('/instances', async (c) => {
+  return c.json(
+    { instances: await listAdminServers() } satisfies AdminListInstancesResponse,
+  );
 });
 
 api.route('/admin', admin);
