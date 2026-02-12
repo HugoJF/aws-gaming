@@ -6,6 +6,7 @@ locals {
   name_prefix            = "${var.project_name}-${var.environment}"
   ecs_service_name       = "${local.name_prefix}-${var.game_instance_id}"
   asg_name               = "${local.name_prefix}-${var.game_instance_id}-asg"
+  capacity_provider_name = "cp-${local.name_prefix}-${var.game_instance_id}"
   cluster_name           = element(reverse(split("/", var.ecs_cluster_arn)), 0)
   health_sidecar_enabled = try(trimspace(var.health_sidecar_image) != "", false)
 
@@ -37,6 +38,14 @@ locals {
         },
         var.container_command == null ? {} : {
           command = var.container_command
+        },
+        length(var.container_environment) == 0 ? {} : {
+          environment = [
+            for key in sort(keys(var.container_environment)) : {
+              name  = key
+              value = var.container_environment[key]
+            }
+          ]
         }
       )
     ],
@@ -227,6 +236,13 @@ resource "aws_autoscaling_group" "this" {
     propagate_at_launch = true
   }
 
+  # Required for instances to register under the ECS capacity provider.
+  tag {
+    key                 = "AmazonECSManaged"
+    value               = ""
+    propagate_at_launch = true
+  }
+
   dynamic "tag" {
     for_each = local.base_tags
 
@@ -236,6 +252,16 @@ resource "aws_autoscaling_group" "this" {
       propagate_at_launch = true
     }
   }
+}
+
+resource "aws_ecs_capacity_provider" "this" {
+  name = local.capacity_provider_name
+
+  auto_scaling_group_provider {
+    auto_scaling_group_arn = aws_autoscaling_group.this.arn
+  }
+
+  tags = local.base_tags
 }
 
 resource "aws_ecs_task_definition" "this" {
@@ -253,17 +279,16 @@ resource "aws_ecs_service" "this" {
   cluster                            = var.ecs_cluster_arn
   task_definition                    = aws_ecs_task_definition.this.arn
   desired_count                      = var.task_count
-  launch_type                        = "EC2"
   deployment_minimum_healthy_percent = 0
   deployment_maximum_percent         = 100
 
   tags = local.base_tags
 
-  # Hard-pin each service to its own EC2 capacity in the shared cluster.
-  placement_constraints {
-    type       = "memberOf"
-    expression = "attribute:GameInstance == ${var.game_instance_id}"
+  # Hard-pin each service to its own EC2 ASG via dedicated capacity provider.
+  capacity_provider_strategy {
+    capacity_provider = aws_ecs_capacity_provider.this.name
+    weight            = 1
   }
 
-  depends_on = [aws_autoscaling_group.this]
+  depends_on = [aws_autoscaling_group.this, aws_ecs_capacity_provider.this]
 }

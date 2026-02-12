@@ -28,6 +28,11 @@ output "game_asg_names" {
   value       = { for key, module_ref in module.game_service : key => module_ref.auto_scaling_group_name }
 }
 
+output "game_capacity_provider_names" {
+  description = "ECS capacity provider names by game instance"
+  value       = { for key, module_ref in module.game_service : key => module_ref.capacity_provider_name }
+}
+
 output "game_dns_names" {
   description = "DNS names by game instance"
   value       = { for key, module_ref in module.game_service : key => module_ref.dns_name }

@@ -8,6 +8,11 @@ output "auto_scaling_group_name" {
   value       = aws_autoscaling_group.this.name
 }
 
+output "capacity_provider_name" {
+  description = "ECS capacity provider name"
+  value       = aws_ecs_capacity_provider.this.name
+}
+
 output "instance_security_group_id" {
   description = "Security group id attached to ECS instances"
   value       = aws_security_group.instance.id

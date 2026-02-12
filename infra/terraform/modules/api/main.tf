@@ -125,7 +125,9 @@ data "aws_iam_policy_document" "lambda_permissions" {
     effect = "Allow"
     actions = [
       "ecs:DescribeContainerInstances",
+      "ecs:DescribeTasks",
       "ecs:DescribeServices",
+      "ecs:ListTasks",
       "ecs:ListContainerInstances"
     ]
     resources = ["*"]

@@ -44,6 +44,12 @@ variable "container_command" {
   default     = null
 }
 
+variable "container_environment" {
+  description = "Optional environment variables for the game container"
+  type        = map(string)
+  default     = {}
+}
+
 variable "container_port" {
   description = "Container port exposed by the service"
   type        = number

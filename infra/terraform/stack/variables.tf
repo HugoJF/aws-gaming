@@ -189,6 +189,7 @@ variable "game_instances" {
     template_id                  = string
     container_image              = string
     container_command            = optional(list(string))
+    container_environment        = optional(map(string), {})
     host_port                    = optional(number, 80)
     game_type                    = optional(string, "minecraft")
     display_name                 = optional(string)
