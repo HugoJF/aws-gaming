@@ -1,18 +1,28 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useServerPolling } from '@/hooks/use-server-polling';
 import { useAdminMode } from '@/hooks/use-admin-mode';
 import { DashboardHeader } from '@/components/dashboard-header';
 import { EmptyState } from '@/components/empty-state';
 import { UnauthedScreen } from '@/components/unauthed-screen';
+import { BootstrapScreen } from '@/components/bootstrap-screen';
 import { ServerCard } from '@/components/server-card';
 import { AdminView } from '@/components/admin/admin-view';
 import { Loader2 } from 'lucide-react';
 
+const BOOTSTRAP_DONE_KEY = 'serverdeck_bootstrap_not_needed';
+const NAV_EVENT = 'serverdeck:navigate';
+
 export function App() {
   const { token, isAuthenticated, login, logout } = useAuth();
   const [authError, setAuthError] = useState<string | null>(null);
+  const [pathVersion, setPathVersion] = useState(0);
+  const [skipBootstrapCheck, setSkipBootstrapCheck] = useState(() =>
+    localStorage.getItem(BOOTSTRAP_DONE_KEY) === '1',
+  );
   const { isAdmin, currentView, setCurrentView } = useAdminMode(token);
+  const pathname = window.location.pathname;
+  const isBootstrapRoute = pathname === '/bootstrap';
 
   const handleAuthError = useCallback((message?: string) => {
     setAuthError(message ?? 'Session expired. Please enter your access token again.');
@@ -24,12 +34,63 @@ export function App() {
     login(nextToken);
   }, [login]);
 
+  const replacePath = useCallback((nextPath: string) => {
+    if (window.location.pathname === nextPath) return;
+    window.history.replaceState(null, '', nextPath);
+    window.dispatchEvent(new Event(NAV_EVENT));
+  }, []);
+
+  const markBootstrapAsComplete = useCallback(() => {
+    localStorage.setItem(BOOTSTRAP_DONE_KEY, '1');
+    setSkipBootstrapCheck(true);
+  }, []);
+
+  useEffect(() => {
+    const rerenderForPathChange = () => setPathVersion((v) => v + 1);
+    window.addEventListener('popstate', rerenderForPathChange);
+    window.addEventListener(NAV_EVENT, rerenderForPathChange);
+    return () => {
+      window.removeEventListener('popstate', rerenderForPathChange);
+      window.removeEventListener(NAV_EVENT, rerenderForPathChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) return;
+    if (!skipBootstrapCheck && pathname === '/') {
+      replacePath('/bootstrap');
+      return;
+    }
+    if (skipBootstrapCheck && isBootstrapRoute) {
+      replacePath('/');
+    }
+  }, [isAuthenticated, isBootstrapRoute, pathname, replacePath, skipBootstrapCheck]);
+
+  void pathVersion;
+
   const { servers, loading, error, togglePower } = useServerPolling({
     token,
     onAuthError: handleAuthError,
   });
 
   if (!isAuthenticated) {
+    if (!skipBootstrapCheck && pathname === '/') {
+      return null;
+    }
+    if (isBootstrapRoute && !skipBootstrapCheck) {
+      return (
+        <BootstrapScreen
+          onTokenSubmit={handleTokenSubmit}
+          onBootstrapCompleted={markBootstrapAsComplete}
+          onBootstrapUnavailable={() => {
+            markBootstrapAsComplete();
+            replacePath('/');
+          }}
+          authError={authError}
+          onDismissAuthError={() => setAuthError(null)}
+        />
+      );
+    }
     return (
       <UnauthedScreen
         onTokenSubmit={handleTokenSubmit}
