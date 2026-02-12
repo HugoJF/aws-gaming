@@ -18,6 +18,13 @@ game_instances = {
       TYPE   = "PAPER"
       MEMORY = "2G"
     }
+    container_health_check = {
+      command      = ["CMD-SHELL", "ps -ef | grep -q '[j]ava'"]
+      interval     = 30
+      timeout      = 5
+      retries      = 5
+      start_period = 180
+    }
     game_type                    = "minecraft"
     host_port                    = 25565
     query_port                   = 25565

@@ -186,10 +186,17 @@ variable "shared_health_sidecar_image" {
 variable "game_instances" {
   description = "Map of game instances to deploy"
   type = map(object({
-    template_id                  = string
-    container_image              = string
-    container_command            = optional(list(string))
-    container_environment        = optional(map(string), {})
+    template_id           = string
+    container_image       = string
+    container_command     = optional(list(string))
+    container_environment = optional(map(string), {})
+    container_health_check = optional(object({
+      command      = list(string)
+      interval     = optional(number, 30)
+      timeout      = optional(number, 5)
+      retries      = optional(number, 3)
+      start_period = optional(number, 60)
+    }), null)
     host_port                    = optional(number, 80)
     game_type                    = optional(string, "minecraft")
     display_name                 = optional(string)

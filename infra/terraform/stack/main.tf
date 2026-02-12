@@ -66,6 +66,7 @@ module "game_service" {
   container_image                 = each.value.container_image
   container_command               = try(each.value.container_command, null)
   container_environment           = each.value.container_environment
+  container_health_check          = try(each.value.container_health_check, null)
   container_port                  = each.value.host_port
   host_port                       = each.value.host_port
   health_port                     = local.shared_health_port

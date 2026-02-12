@@ -46,6 +46,15 @@ locals {
               value = var.container_environment[key]
             }
           ]
+        },
+        var.container_health_check == null ? {} : {
+          healthCheck = {
+            command     = var.container_health_check.command
+            interval    = var.container_health_check.interval
+            timeout     = var.container_health_check.timeout
+            retries     = var.container_health_check.retries
+            startPeriod = var.container_health_check.start_period
+          }
         }
       )
     ],

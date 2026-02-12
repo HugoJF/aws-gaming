@@ -50,6 +50,18 @@ variable "container_environment" {
   default     = {}
 }
 
+variable "container_health_check" {
+  description = "Optional ECS health check config for the primary game container"
+  type = object({
+    command      = list(string)
+    interval     = optional(number, 30)
+    timeout      = optional(number, 5)
+    retries      = optional(number, 3)
+    start_period = optional(number, 60)
+  })
+  default = null
+}
+
 variable "container_port" {
   description = "Container port exposed by the service"
   type        = number

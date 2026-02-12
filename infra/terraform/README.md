@@ -89,6 +89,9 @@ Each `game_instances.<id>` entry supports:
 
 - `game_type` (`minecraft`, `zomboid`, or `generic`)
 - `container_command` (optional): command override for the primary game container
+- `container_health_check` (optional): ECS health check object for the primary game container
+  - `command` (required list, e.g. `["CMD-SHELL", "ps -ef | grep -q '[j]ava'"]`)
+  - `interval` / `timeout` / `retries` / `start_period` (optional)
 - `display_name` (optional): UI display name (defaults to instance id)
 - `game_label` (optional): UI label override (defaults from `game_type`)
 - `location` (optional): UI location label (defaults to uppercased AWS region)
