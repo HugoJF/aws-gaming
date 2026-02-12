@@ -152,6 +152,24 @@ variable "log_retention_days" {
   default     = 14
 }
 
+variable "efs_container_path" {
+  description = "Container path where the EFS volume is mounted"
+  type        = string
+  default     = "/data"
+}
+
+variable "efs_owner_uid" {
+  description = "UID to set on the EFS mount directory"
+  type        = number
+  default     = 1000
+}
+
+variable "efs_owner_gid" {
+  description = "GID to set on the EFS mount directory"
+  type        = number
+  default     = 1000
+}
+
 variable "health_sidecar_image" {
   description = "Optional health sidecar container image. If null, no sidecar container is deployed."
   type        = string

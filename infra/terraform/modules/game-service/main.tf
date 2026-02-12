@@ -4,6 +4,10 @@ data "aws_ssm_parameter" "ecs_ami" {
 
 data "aws_region" "current" {}
 
+data "aws_subnet" "efs" {
+  id = var.public_subnet_ids[0]
+}
+
 locals {
   name_prefix            = "${var.project_name}-${var.environment}"
   ecs_service_name       = "${local.name_prefix}-${var.game_instance_id}"
@@ -67,6 +71,13 @@ locals {
               "awslogs-stream-prefix" = var.game_instance_id
             }
           }
+        },
+        {
+          mountPoints = [{
+            containerPath = var.efs_container_path
+            sourceVolume  = var.game_instance_id
+            readOnly      = false
+          }]
         }
       )
     ],
@@ -113,6 +124,50 @@ resource "aws_cloudwatch_log_group" "containers" {
   retention_in_days = var.log_retention_days
 
   tags = local.base_tags
+}
+
+resource "aws_efs_file_system" "this" {
+  availability_zone_name = data.aws_subnet.efs.availability_zone
+  performance_mode       = "generalPurpose"
+
+  lifecycle_policy {
+    transition_to_ia = "AFTER_7_DAYS"
+  }
+
+  tags = merge(local.base_tags, {
+    Name = "${local.name_prefix}-${var.game_instance_id}-efs"
+  })
+}
+
+resource "aws_efs_backup_policy" "this" {
+  file_system_id = aws_efs_file_system.this.id
+
+  backup_policy {
+    status = "ENABLED"
+  }
+}
+
+resource "aws_security_group" "efs" {
+  name        = "${local.name_prefix}-${var.game_instance_id}-efs"
+  description = "Security group for ${var.game_instance_id} EFS"
+  vpc_id      = var.vpc_id
+
+  ingress {
+    from_port       = 2049
+    to_port         = 2049
+    protocol        = "tcp"
+    security_groups = [aws_security_group.instance.id]
+  }
+
+  tags = merge(local.base_tags, {
+    Name = "${local.name_prefix}-${var.game_instance_id}-efs"
+  })
+}
+
+resource "aws_efs_mount_target" "this" {
+  file_system_id  = aws_efs_file_system.this.id
+  subnet_id       = var.public_subnet_ids[0]
+  security_groups = [aws_security_group.efs.id]
 }
 
 resource "aws_security_group" "instance" {
@@ -212,7 +267,11 @@ resource "aws_launch_template" "this" {
     "echo ECS_CLUSTER=${local.cluster_name} >> /etc/ecs/ecs.config",
     "echo ECS_ENABLE_TASK_IAM_ROLE=true >> /etc/ecs/ecs.config",
     "echo ECS_ENABLE_TASK_IAM_ROLE_NETWORK_HOST=true >> /etc/ecs/ecs.config",
-    "echo ECS_INSTANCE_ATTRIBUTES='{\"GameInstance\":\"${var.game_instance_id}\"}' >> /etc/ecs/ecs.config"
+    "echo ECS_INSTANCE_ATTRIBUTES='{\"GameInstance\":\"${var.game_instance_id}\"}' >> /etc/ecs/ecs.config",
+    "yum install -y amazon-efs-utils",
+    "mkdir -p /opt/${var.game_instance_id}",
+    "mount -t efs ${aws_efs_file_system.this.id}:/ /opt/${var.game_instance_id}",
+    "chown ${var.efs_owner_uid}:${var.efs_owner_gid} /opt/${var.game_instance_id}",
   ]))
 
   iam_instance_profile {
@@ -258,7 +317,8 @@ resource "aws_autoscaling_group" "this" {
   min_size            = var.instance_count
   max_size            = var.instance_count
   desired_capacity    = var.instance_count
-  vpc_zone_identifier = var.public_subnet_ids
+  # Pin to single AZ matching the One Zone EFS mount target.
+  vpc_zone_identifier = [var.public_subnet_ids[0]]
   health_check_type   = "EC2"
 
   launch_template {
@@ -306,6 +366,11 @@ resource "aws_ecs_task_definition" "this" {
   requires_compatibilities = ["EC2"]
 
   container_definitions = jsonencode(local.container_definitions)
+
+  volume {
+    name      = var.game_instance_id
+    host_path = "/opt/${var.game_instance_id}"
+  }
 
   tags = local.base_tags
 }

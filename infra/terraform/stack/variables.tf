@@ -218,6 +218,9 @@ variable "game_instances" {
     extra_ingress_cidrs          = optional(list(string), [])
     ssh_ingress_cidrs            = optional(list(string), [])
     dns_name                     = optional(string)
+    efs_container_path           = optional(string, "/data")
+    efs_owner_uid                = optional(number, 1000)
+    efs_owner_gid                = optional(number, 1000)
   }))
   default = {}
 
