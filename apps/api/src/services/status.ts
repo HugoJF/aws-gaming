@@ -46,27 +46,23 @@ export class StatusService {
   async buildServerView(instance: GameInstance): Promise<ServerView> {
     let powerAction = await this.repo.getPowerAction(instance.id);
 
-    // Use cache only when no transition is in progress.
-    if (!powerAction) {
+    // Use cache when there is no active transition in progress.
+    if (!this.isTransitionActive(powerAction)) {
       const cached = await this.repo.getCachedStatus(instance.id);
       if (cached) {
-        return this.toServerView(instance, cached, null);
+        return this.toServerView(instance, cached, powerAction);
       }
     }
 
-    // Fetch fresh status
-    let freshStatus = await this.fetchFreshStatus(instance, powerAction);
-
-    // Advance power action if one is in progress
-    if (powerAction) {
+    // If a transition is in progress, advance first so we don't perform
+    // duplicate expensive probes (e.g. GameDig) in the same request.
+    if (this.isTransitionActive(powerAction)) {
       await this.advancePowerAction(instance, powerAction);
       powerAction = await this.repo.getPowerAction(instance.id);
-
-      // If transition finalized during this poll, refresh status without transitional override.
-      if (!powerAction) {
-        freshStatus = await this.fetchFreshStatus(instance, null);
-      }
     }
+
+    // Fetch fresh status once, based on the latest power action state.
+    const freshStatus = await this.fetchFreshStatus(instance, powerAction);
 
     // Cache the result
     await this.repo.putCachedStatus(freshStatus);
@@ -110,6 +106,7 @@ export class StatusService {
     // GameDig query (skip if ECS has no running tasks)
     let liveData: LiveData | null = null;
     if (
+      status === 'online' &&
       instance.gameType !== 'generic' &&
       ecsStatus &&
       ecsStatus.runningCount > 0 &&
@@ -598,6 +595,12 @@ export class StatusService {
 
   private hasFailedStage(action: PowerAction): boolean {
     return action.stages.some((stage) => stage.status === 'failed');
+  }
+
+  private isTransitionActive(action: PowerAction | null): action is PowerAction {
+    if (!action) return false;
+    const current = action.stages.find((stage) => stage.id === action.currentStageId);
+    return current?.status === 'in_progress';
   }
 
   private async completeStageAndAdvance(

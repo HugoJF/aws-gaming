@@ -1,7 +1,7 @@
 import { GameDig } from 'gamedig';
 import type { GameType, LiveData } from '@aws-gaming/contracts';
 
-const QUERY_TIMEOUT_MS = 5_000;
+const QUERY_TIMEOUT_MS = 1_500;
 
 /** Map our GameType to gamedig's type string */
 const GAMEDIG_TYPE: Record<Exclude<GameType, 'generic'>, string> = {
