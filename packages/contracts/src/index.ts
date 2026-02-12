@@ -4,11 +4,8 @@
 
 export type GameType =
   | 'minecraft'
-  | 'valheim'
-  | 'cs2'
-  | 'rust'
-  | 'ark'
-  | 'terraria';
+  | 'zomboid'
+  | 'generic';
 
 export type ServerStatus =
   | 'online'
@@ -132,8 +129,8 @@ export interface GameInstance {
   instanceCount: number;
   taskCount: number;
 
-  /* Runtime state */
-  state: ServerStatus;
+  /* Runtime state (optional; computed from AWS + cache when absent) */
+  state?: ServerStatus;
   powerAction?: PowerAction;
   cachedStatus?: CachedServerStatus;
 }
@@ -146,6 +143,7 @@ export interface CachedServerStatus {
   instanceId: string;
   status: ServerStatus;
   liveData: LiveData | null;
+  publicIp?: string | null;
   healthChecks: HealthCheck[];
   fetchedAt: string;
   ttl: number;

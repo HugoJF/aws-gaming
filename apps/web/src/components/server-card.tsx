@@ -43,25 +43,13 @@ const GAME_CONFIG: Record<
     accentBorder: 'border-emerald-400/20',
     accentGlow: 'bg-emerald-400/5',
   },
-  valheim: {
-    accentBorder: 'border-sky-400/20',
-    accentGlow: 'bg-sky-400/5',
-  },
-  cs2: {
+  zomboid: {
     accentBorder: 'border-amber-400/20',
     accentGlow: 'bg-amber-400/5',
   },
-  rust: {
-    accentBorder: 'border-orange-400/20',
-    accentGlow: 'bg-orange-400/5',
-  },
-  ark: {
-    accentBorder: 'border-violet-400/20',
-    accentGlow: 'bg-violet-400/5',
-  },
-  terraria: {
-    accentBorder: 'border-pink-400/20',
-    accentGlow: 'bg-pink-400/5',
+  generic: {
+    accentBorder: 'border-sky-400/20',
+    accentGlow: 'bg-sky-400/5',
   },
 };
 

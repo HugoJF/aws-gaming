@@ -79,7 +79,7 @@ variable "api_lambda_timeout_seconds" {
 variable "api_lambda_reserved_concurrent_executions" {
   description = "Reserved concurrency limit for API Lambda. Set null to disable."
   type        = number
-  default     = 20
+  default     = null
 }
 
 variable "api_lambda_architectures" {
@@ -120,7 +120,7 @@ variable "api_function_url_cors_allow_origins" {
 variable "api_function_url_cors_allow_methods" {
   description = "Allowed CORS methods for the API Function URL"
   type        = list(string)
-  default     = ["GET", "POST", "OPTIONS"]
+  default     = ["GET", "POST", "PATCH"]
 }
 
 variable "api_function_url_cors_allow_headers" {
@@ -189,6 +189,12 @@ variable "game_instances" {
     template_id                  = string
     container_image              = string
     host_port                    = optional(number, 80)
+    game_type                    = optional(string, "minecraft")
+    display_name                 = optional(string)
+    game_label                   = optional(string)
+    location                     = optional(string)
+    max_players                  = optional(number, 20)
+    query_port                   = optional(number)
     instance_type                = optional(string, "t3.micro")
     container_memory_reservation = optional(number, 256)
     ecs_optimized_ami_ssm_path   = optional(string, "/aws/service/ecs/optimized-ami/amazon-linux-2/recommended/image_id")
@@ -199,4 +205,14 @@ variable "game_instances" {
     dns_name                     = optional(string)
   }))
   default = {}
+
+  validation {
+    condition = alltrue([
+      for cfg in values(var.game_instances) :
+      try(cfg.game_type == null || contains(
+        ["minecraft", "zomboid", "generic"],
+      cfg.game_type), true)
+    ])
+    error_message = "game_instances[*].game_type must be one of: minecraft, zomboid, generic."
+  }
 }

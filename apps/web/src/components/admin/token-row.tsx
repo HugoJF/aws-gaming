@@ -10,11 +10,8 @@ import { Ban, Pencil } from 'lucide-react';
 
 const GAME_COLORS: Record<GameType, string> = {
   minecraft: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-  valheim: 'bg-sky-500/10 text-sky-400 border-sky-500/20',
-  cs2: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-  rust: 'bg-orange-500/10 text-orange-400 border-orange-500/20',
-  ark: 'bg-violet-500/10 text-violet-400 border-violet-500/20',
-  terraria: 'bg-pink-500/10 text-pink-400 border-pink-500/20',
+  zomboid: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+  generic: 'bg-sky-500/10 text-sky-400 border-sky-500/20',
 };
 
 const STATUS_STYLES: Record<TokenStatus, string> = {

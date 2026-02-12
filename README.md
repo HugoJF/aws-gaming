@@ -63,7 +63,8 @@ aws dynamodb create-table \
   --table-name hugo-aws-gaming-tf-locks \
   --attribute-definitions AttributeName=LockID,AttributeType=S \
   --key-schema AttributeName=LockID,KeyType=HASH \
-  --billing-mode PAY_PER_REQUEST
+  --billing-mode PAY_PER_REQUEST \
+  --region sa-east-1
 ```
 
 2. `infra/terraform/stack/backend.hcl` and `infra/terraform/stack/hello-world.tfvars` are committed for this personal setup.
@@ -93,13 +94,20 @@ terraform -chdir=infra/terraform/stack output game_asg_names
 ## First Access / Admin Bootstrap
 
 1. Open the deployed web app (or local web app pointing at deployed API URL).
-2. If no tokens exist yet, the unauth screen exposes one-time admin bootstrap.
-3. Create the initial admin token in UI. The app will log in automatically.
-4. If bootstrap is already complete, use a token URL (`/t/<token>`) or paste a raw token.
+2. First-time users hitting `/` are redirected to `/bootstrap`.
+3. If no tokens exist yet, `/bootstrap` exposes one-time admin bootstrap.
+4. Create the initial admin token in UI. The app will log in automatically.
+5. If bootstrap is already complete, use a token URL (`/t/<token>`) or paste a raw token.
 
 Related bootstrap endpoints (public, one-time guarded):
 - `GET /api/bootstrap/status`
 - `POST /api/bootstrap/admin`
+
+## Supported Games
+
+- `minecraft`
+- `zomboid`
+- `generic` (no GameDig checks)
 
 ## Destroy
 

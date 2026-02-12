@@ -31,7 +31,8 @@ aws dynamodb create-table \
   --table-name hugo-aws-gaming-tf-locks \
   --attribute-definitions AttributeName=LockID,AttributeType=S \
   --key-schema AttributeName=LockID,KeyType=HASH \
-  --billing-mode PAY_PER_REQUEST
+  --billing-mode PAY_PER_REQUEST \
+  --region sa-east-1
 ```
 
 2. Build the API Lambda artifact:
@@ -54,11 +55,13 @@ make tf-apply
 
 ```bash
 INSTANCE_ID=$(aws ec2 describe-instances \
+  --region sa-east-1 \
   --filters Name=tag:GameInstance,Values=hello-web Name=instance-state-name,Values=running \
   --query 'Reservations[0].Instances[0].InstanceId' \
   --output text)
 
 aws ec2 describe-instances \
+  --region sa-east-1 \
   --instance-ids "$INSTANCE_ID" \
   --query 'Reservations[0].Instances[0].PublicIpAddress' \
   --output text
@@ -84,7 +87,13 @@ make tf-plan TF_VARS_FILE=staging.tfvars
 
 Each `game_instances.<id>` entry supports:
 
+- `game_type` (`minecraft`, `zomboid`, or `generic`)
+- `display_name` (optional): UI display name (defaults to instance id)
+- `game_label` (optional): UI label override (defaults from `game_type`)
+- `location` (optional): UI location label (defaults to uppercased AWS region)
+- `max_players` (optional): UI/server metadata value
 - `host_port` (game port exposed externally)
+- `query_port` (optional): override for GameDig query port
 - `dns_name` (optional): game DNS name
 - `extra_ingress_cidrs` (optional): additional CIDRs merged with default ingress CIDRs
 
@@ -110,7 +119,7 @@ Key API variables in `stack/variables.tf`:
 
 - `api_lambda_zip_path` (default `../../../apps/api/dist/lambda.zip`)
 - `api_lambda_memory_size` / `api_lambda_timeout_seconds`
-- `api_lambda_reserved_concurrent_executions` (default `20`, cost/abuse guardrail)
+- `api_lambda_reserved_concurrent_executions` (default `null`; set to a number to cap API concurrency)
 - `api_function_url_auth_type` (`NONE` or `AWS_IAM`)
 - `api_function_url_cors_allow_origins` / methods / headers
 - `api_dynamodb_table_name` (optional override)

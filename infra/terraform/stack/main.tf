@@ -1,6 +1,33 @@
 locals {
   shared_health_port    = 8080
   default_ingress_cidrs = ["0.0.0.0/0"]
+  aws_region_labels = {
+    "sa-east-1" = "South America (Sao Paulo)"
+  }
+  default_location_label = lookup(
+    local.aws_region_labels,
+    var.aws_region,
+    var.aws_region,
+  )
+  game_labels = {
+    minecraft = "Minecraft"
+    zomboid   = "Project Zomboid"
+    generic   = "Generic Container"
+  }
+
+  game_instance_inventory = {
+    for instance_id, cfg in var.game_instances : instance_id => {
+      template_id  = cfg.template_id
+      game_type    = cfg.game_type
+      display_name = coalesce(try(cfg.display_name, null), instance_id)
+      game_label   = coalesce(try(cfg.game_label, null), local.game_labels[cfg.game_type])
+      location     = coalesce(try(cfg.location, null), local.default_location_label)
+      max_players  = cfg.max_players
+      host_port    = cfg.host_port
+      query_port   = try(cfg.query_port, null)
+      dns_name     = try(cfg.dns_name, null)
+    }
+  }
 
   api_game_instance_configs = {
     for instance_id, cfg in var.game_instances : instance_id => merge(
@@ -87,4 +114,45 @@ module "api" {
   autoscaling_group_names               = [for key in sort(keys(module.game_service)) : module.game_service[key].auto_scaling_group_name]
   game_instance_configs                 = local.api_game_instance_configs
   tags                                  = var.tags
+}
+
+resource "aws_dynamodb_table_item" "game_instance" {
+  for_each = local.game_instance_inventory
+
+  table_name = module.api.dynamodb_table_name
+  hash_key   = "pk"
+  range_key  = "sk"
+
+  item = jsonencode(merge(
+    {
+      pk                   = { S = "INSTANCE#${each.key}" }
+      sk                   = { S = "INSTANCE" }
+      entityType           = { S = "GameInstance" }
+      id                   = { S = each.key }
+      templateId           = { S = each.value.template_id }
+      displayName          = { S = each.value.display_name }
+      gameType             = { S = each.value.game_type }
+      gameLabel            = { S = each.value.game_label }
+      location             = { S = each.value.location }
+      maxPlayers           = { N = tostring(each.value.max_players) }
+      hostPort             = { N = tostring(each.value.host_port) }
+      healthPort           = { N = tostring(local.shared_health_port) }
+      ecsClusterArn        = { S = module.platform.ecs_cluster_arn }
+      ecsServiceName       = { S = module.game_service[each.key].ecs_service_name }
+      autoScalingGroupName = { S = module.game_service[each.key].auto_scaling_group_name }
+      instanceCount        = { N = "1" }
+      taskCount            = { N = "1" }
+    },
+    each.value.query_port == null ? {} : {
+      queryPort = { N = tostring(each.value.query_port) }
+    },
+    each.value.dns_name == null ? {} : {
+      dnsName = { S = each.value.dns_name }
+    },
+    var.platform_route53_zone_id == null ? {} : {
+      route53ZoneId = { S = var.platform_route53_zone_id }
+    }
+  ))
+
+  depends_on = [module.game_service]
 }

@@ -31,7 +31,10 @@ import {
 /*  Config from environment                                            */
 /* ------------------------------------------------------------------ */
 
-const TABLE_NAME = process.env.DYNAMODB_TABLE ?? 'aws-gaming-dev';
+const TABLE_NAME =
+  process.env.DYNAMODB_TABLE_NAME ??
+  process.env.DYNAMODB_TABLE ??
+  'aws-gaming-dev';
 const REGION = process.env.AWS_REGION ?? 'sa-east-1';
 
 /* ------------------------------------------------------------------ */
@@ -100,7 +103,11 @@ async function canBootstrapAdmin(): Promise<boolean> {
 
 const app = new Hono();
 
-app.use('*', cors());
+// Lambda Function URL already applies CORS at the edge.
+// Keep Hono CORS only for non-Lambda local runtime paths.
+if (!process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  app.use('*', cors());
+}
 
 /* Health (no auth) */
 app.get('/health', (c) => c.json({ status: 'ok' }));
@@ -225,25 +232,31 @@ api.post('/servers/:id/power', async (c) => {
     return c.json({ error: 'Server not found' }, 404);
   }
 
+  const current = await statusService.buildServerView(instance);
+
   // Check for conflicting states
-  if (body.action === 'on' && instance.state === 'online') {
+  if (body.action === 'on' && current.status === 'online') {
     return c.json({ error: 'Server is already online' }, 409);
   }
-  if (body.action === 'off' && instance.state === 'offline') {
+  if (body.action === 'off' && current.status === 'offline') {
     return c.json({ error: 'Server is already offline' }, 409);
   }
-  if (instance.state === 'booting' || instance.state === 'shutting-down') {
+  if (current.status === 'booting' || current.status === 'shutting-down') {
     return c.json({ error: 'Power transition already in progress' }, 409);
   }
 
   const powerAction = await statusService.startPowerAction(instance, body.action);
-  const view = await statusService.buildServerView({
-    ...instance,
-    state: body.action === 'on' ? 'booting' : 'shutting-down',
-    powerAction,
-  });
+  const view = await statusService.buildServerView(instance);
+  const transitionalStatus = body.action === 'on' ? 'booting' : 'shutting-down';
 
-  return c.json({ server: view } satisfies PowerResponse);
+  return c.json({
+    server: {
+      ...view,
+      status: transitionalStatus,
+      powerAction,
+      lastUpdatedAt: new Date().toISOString(),
+    },
+  } satisfies PowerResponse);
 });
 
 /* Admin API routes */
@@ -431,19 +444,21 @@ admin.post('/tokens/:id/revoke', async (c) => {
 admin.get('/instances', async (c) => {
   const instances = await repo.listInstances();
 
-  const views = instances
-    .map((instance) => ({
-      id: instance.id,
-      displayName: instance.displayName,
-      game: instance.gameType,
-      gameLabel: instance.gameLabel,
-      location: instance.location,
-      status: instance.state,
-      address: instance.dnsName
-        ? `${instance.dnsName}:${instance.hostPort}`
-        : `${instance.id}:${instance.hostPort}`,
-      maxPlayers: instance.maxPlayers,
-    }))
+  const views = (await Promise.all(
+    instances.map(async (instance) => {
+      const server = await statusService.buildServerView(instance);
+      return {
+        id: instance.id,
+        displayName: instance.displayName,
+        game: instance.gameType,
+        gameLabel: instance.gameLabel,
+        location: instance.location,
+        status: server.status,
+        address: server.address,
+        maxPlayers: instance.maxPlayers,
+      };
+    }),
+  ))
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
 
   return c.json({ instances: views } satisfies AdminListInstancesResponse);

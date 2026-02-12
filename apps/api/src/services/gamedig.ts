@@ -4,13 +4,9 @@ import type { GameType, LiveData } from '@aws-gaming/contracts';
 const QUERY_TIMEOUT_MS = 5_000;
 
 /** Map our GameType to gamedig's type string */
-const GAMEDIG_TYPE: Record<GameType, string> = {
+const GAMEDIG_TYPE: Record<Exclude<GameType, 'generic'>, string> = {
   minecraft: 'minecraft',
-  valheim: 'valheim',
-  cs2: 'csgo', // gamedig uses 'csgo' for both CS:GO and CS2
-  rust: 'rust',
-  ark: 'arkse',
-  terraria: 'terraria',
+  zomboid: 'przomboid',
 };
 
 export interface GameDigQueryInput {
@@ -22,6 +18,10 @@ export interface GameDigQueryInput {
 export async function queryGameServer(
   input: GameDigQueryInput,
 ): Promise<LiveData | null> {
+  if (input.gameType === 'generic') {
+    return null;
+  }
+
   try {
     const result = await GameDig.query({
       type: GAMEDIG_TYPE[input.gameType],

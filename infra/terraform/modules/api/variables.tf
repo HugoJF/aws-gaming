@@ -81,7 +81,7 @@ variable "function_url_cors_allow_origins" {
 variable "function_url_cors_allow_methods" {
   description = "Allowed CORS methods for the Lambda Function URL"
   type        = list(string)
-  default     = ["GET", "POST", "OPTIONS"]
+  default     = ["GET", "POST", "PATCH"]
 }
 
 variable "function_url_cors_allow_headers" {
@@ -129,7 +129,7 @@ variable "autoscaling_group_names" {
 variable "lambda_reserved_concurrent_executions" {
   description = "Reserved concurrency limit for API Lambda. Set null to disable."
   type        = number
-  default     = 20
+  default     = null
 }
 
 variable "enable_attack_detection_alarms" {

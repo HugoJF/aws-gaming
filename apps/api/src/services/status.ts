@@ -79,7 +79,7 @@ export class StatusService {
     ]);
 
     // Determine current status from AWS state
-    let status: ServerStatus = instance.state;
+    let status: ServerStatus = instance.state ?? 'offline';
     if (asgStatus && ecsStatus) {
       if (ecsStatus.runningCount > 0) {
         status = 'online';
@@ -94,12 +94,20 @@ export class StatusService {
       status = powerAction.action === 'on' ? 'booting' : 'shutting-down';
     }
 
+    const publicIp = await this.resolvePublicIp(asgStatus);
+    const queryHost = instance.dnsName ?? publicIp;
+
     // GameDig query (skip if ECS has no running tasks)
     let liveData: LiveData | null = null;
-    if (ecsStatus && ecsStatus.runningCount > 0 && instance.dnsName) {
+    if (
+      instance.gameType !== 'generic' &&
+      ecsStatus &&
+      ecsStatus.runningCount > 0 &&
+      queryHost
+    ) {
       liveData = await queryGameServer({
         gameType: instance.gameType,
-        host: instance.dnsName,
+        host: queryHost,
         port: instance.queryPort ?? instance.hostPort,
       });
     }
@@ -110,22 +118,28 @@ export class StatusService {
       asgStatus,
       ecsStatus,
       liveData,
+      queryHost,
       status,
     );
-
-    // Update instance state in DB if it changed
-    if (status !== instance.state && !powerAction) {
-      await this.repo.updateInstanceState(instance.id, status);
-    }
 
     return {
       instanceId: instance.id,
       status,
       liveData,
+      publicIp,
       healthChecks,
       fetchedAt: new Date().toISOString(),
       ttl: Math.floor(Date.now() / 1000) + 3600,
     };
+  }
+
+  private async resolvePublicIp(
+    asgStatus: Awaited<ReturnType<AsgControl['describe']>> | null,
+  ): Promise<string | null> {
+    if (!asgStatus) return null;
+    const instanceIds = asgStatus.instances.map((i) => i.instanceId);
+    if (instanceIds.length === 0) return null;
+    return this.ec2.getPublicIp(instanceIds);
   }
 
   private buildHealthChecks(
@@ -133,6 +147,7 @@ export class StatusService {
     asgStatus: Awaited<ReturnType<AsgControl['describe']>> | null,
     ecsStatus: Awaited<ReturnType<EcsControl['describe']>> | null,
     liveData: LiveData | null,
+    queryHost: string | null,
     status: ServerStatus,
   ): HealthCheck[] {
     if (status === 'offline') {
@@ -209,17 +224,32 @@ export class StatusService {
     }
 
     // Game Process check (via GameDig)
-    if (liveData) {
+    if (instance.gameType === 'generic') {
+      checks.push({
+        name: 'Game Process',
+        status: ecsStatus && ecsStatus.runningCount > 0 ? 'healthy' : 'unknown',
+        detail:
+          ecsStatus && ecsStatus.runningCount > 0
+            ? 'Generic mode (GameDig disabled)'
+            : 'No running tasks',
+      });
+    } else if (liveData) {
       checks.push({
         name: 'Game Process',
         status: 'healthy',
         detail: `${liveData.players}/${liveData.maxPlayers} players`,
       });
-    } else if (ecsStatus && ecsStatus.runningCount > 0) {
+    } else if (ecsStatus && ecsStatus.runningCount > 0 && queryHost) {
       checks.push({
         name: 'Game Process',
         status: 'unhealthy',
         detail: 'GameDig query failed',
+      });
+    } else if (ecsStatus && ecsStatus.runningCount > 0) {
+      checks.push({
+        name: 'Game Process',
+        status: 'unknown',
+        detail: 'No DNS or public IP available for GameDig',
       });
     } else {
       checks.push({
@@ -239,8 +269,8 @@ export class StatusService {
     } else {
       checks.push({
         name: 'DNS',
-        status: 'unknown',
-        detail: 'No DNS configured',
+        status: 'healthy',
+        detail: 'Not configured (using direct host)',
       });
     }
 
@@ -259,13 +289,13 @@ export class StatusService {
     status: CachedServerStatus,
     powerAction?: PowerAction | null,
   ): ServerView {
-    const address = instance.dnsName
-      ? `${instance.dnsName}:${instance.hostPort}`
-      : `${instance.id}:${instance.hostPort}`;
+    const host = instance.dnsName ?? status.publicIp ?? instance.id;
+    const address = `${host}:${instance.hostPort}`;
 
+    const healthHost = instance.dnsName ?? status.publicIp;
     const healthEndpoint =
-      instance.dnsName && status.status !== 'offline'
-        ? `${instance.dnsName}:${instance.healthPort}`
+      healthHost && status.status !== 'offline'
+        ? `${healthHost}:${instance.healthPort}`
         : null;
 
     return {
@@ -327,10 +357,6 @@ export class StatusService {
 
     // Persist
     await this.repo.putPowerAction(instance.id, powerAction);
-    await this.repo.updateInstanceState(
-      instance.id,
-      action === 'on' ? 'booting' : 'shutting-down',
-    );
 
     return powerAction;
   }
@@ -438,10 +464,16 @@ export class StatusService {
         );
       }
       case 'game_ready': {
-        if (!instance.dnsName) return true;
+        if (instance.gameType === 'generic') return true;
+
+        const host = instance.dnsName ?? await this.resolvePublicIp(
+          await this.asg.describe(instance.autoScalingGroupName),
+        );
+        if (!host) return true;
+
         const liveData = await queryGameServer({
           gameType: instance.gameType,
-          host: instance.dnsName,
+          host,
           port: instance.queryPort ?? instance.hostPort,
         });
         return liveData !== null;
@@ -505,8 +537,6 @@ export class StatusService {
 
     if (nextIndex >= action.stages.length) {
       // All stages done — finalize
-      const finalState = action.action === 'on' ? 'online' : 'offline';
-      await this.repo.updateInstanceState(instance.id, finalState);
       await this.repo.deletePowerAction(instance.id);
       return;
     }
@@ -539,6 +569,5 @@ export class StatusService {
     };
 
     await this.repo.putPowerAction(instance.id, action);
-    await this.repo.updateInstanceState(instance.id, 'error');
   }
 }

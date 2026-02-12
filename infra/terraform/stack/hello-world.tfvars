@@ -13,6 +13,7 @@ game_instances = {
   hello-web = {
     template_id         = "hello-world"
     container_image     = "pvermeyden/nodejs-hello-world:a1e8cf1edcc04e6d905078aed9861807f6da0da4"
+    game_type           = "generic"
     host_port           = 80
     instance_type       = "t3.micro"
     extra_ingress_cidrs = []

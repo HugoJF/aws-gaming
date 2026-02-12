@@ -201,7 +201,7 @@ resource "aws_lambda_function" "api" {
   timeout                        = var.lambda_timeout_seconds
   reserved_concurrent_executions = var.lambda_reserved_concurrent_executions
 
-  source_code_hash = var.lambda_source_code_hash
+  source_code_hash = coalesce(var.lambda_source_code_hash, filebase64sha256(var.lambda_zip_path))
 
   environment {
     variables = local.lambda_environment
@@ -235,6 +235,15 @@ resource "aws_lambda_permission" "public_function_url" {
   function_name          = aws_lambda_function.api.function_name
   principal              = "*"
   function_url_auth_type = "NONE"
+}
+
+resource "aws_lambda_permission" "public_function_invoke" {
+  count = var.function_url_auth_type == "NONE" ? 1 : 0
+
+  statement_id  = "AllowPublicFunctionInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.api.function_name
+  principal     = "*"
 }
 
 resource "aws_cloudwatch_metric_alarm" "lambda_invocations_spike" {

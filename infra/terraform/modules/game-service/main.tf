@@ -7,7 +7,6 @@ locals {
   ecs_service_name       = "${local.name_prefix}-${var.game_instance_id}"
   asg_name               = "${local.name_prefix}-${var.game_instance_id}-asg"
   cluster_name           = element(reverse(split("/", var.ecs_cluster_arn)), 0)
-  game_instance_id_regex = replace(var.game_instance_id, "-", "\\-")
   health_sidecar_enabled = try(trimspace(var.health_sidecar_image) != "", false)
 
   base_tags = merge(var.tags, {
@@ -246,7 +245,7 @@ resource "aws_ecs_service" "this" {
   # Hard-pin each service to its own EC2 capacity in the shared cluster.
   placement_constraints {
     type       = "memberOf"
-    expression = "attribute:GameInstance =~ ^${local.game_instance_id_regex}$"
+    expression = "attribute:GameInstance == ${var.game_instance_id}"
   }
 
   depends_on = [aws_autoscaling_group.this]
