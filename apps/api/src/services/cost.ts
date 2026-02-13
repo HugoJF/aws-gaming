@@ -211,16 +211,21 @@ export class CostService {
     const asg = res.AutoScalingGroups?.[0];
     if (!asg) throw new Error(`ASG not found: ${asgName}`);
 
-    const lt = asg.LaunchTemplate;
+    const lt =
+      asg.LaunchTemplate ??
+      asg.MixedInstancesPolicy?.LaunchTemplate?.LaunchTemplateSpecification ??
+      null;
+
     if (!lt?.LaunchTemplateId && !lt?.LaunchTemplateName) {
       return { instanceType: null, spotMaxPriceUsdPerHour: null };
     }
 
-    const ver = lt.Version ?? '$Default';
+    const ver = lt.Version && lt.Version.trim().length > 0 ? lt.Version : '$Default';
     const ltRes = await this.ec2.send(
       new DescribeLaunchTemplateVersionsCommand({
-        LaunchTemplateId: lt.LaunchTemplateId,
-        LaunchTemplateName: lt.LaunchTemplateName,
+        ...(lt.LaunchTemplateId
+          ? { LaunchTemplateId: lt.LaunchTemplateId }
+          : { LaunchTemplateName: lt.LaunchTemplateName! }),
         Versions: [ver],
       }),
     );
