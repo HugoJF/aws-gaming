@@ -52,6 +52,18 @@ function parseUsd(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function parsePricingDoc(entry: unknown): any | null {
+  // Pricing API returns a lazy JSON string object; String(entry) normalizes both
+  // primitive strings and String objects.
+  try {
+    const raw = String(entry);
+    if (!raw || raw === '[object Object]') return null;
+    return JSON.parse(raw) as any;
+  } catch {
+    return null;
+  }
+}
+
 function extractEfsIdFromArn(arn: string): string | null {
   // arn:aws:elasticfilesystem:region:acct:file-system/fs-12345678
   const marker = 'file-system/';
@@ -288,9 +300,9 @@ export class CostService {
 
     const priceList = res.PriceList ?? [];
     for (const entry of priceList) {
-      if (typeof entry !== 'string') continue;
       try {
-        const product = JSON.parse(entry) as any;
+        const product = parsePricingDoc(entry);
+        if (!product) continue;
         const terms = product?.terms?.OnDemand;
         if (!terms || typeof terms !== 'object') continue;
         for (const termKey of Object.keys(terms)) {
@@ -348,9 +360,9 @@ export class CostService {
 
       const priceList = res.PriceList ?? [];
       for (const entry of priceList) {
-        if (typeof entry !== 'string') continue;
         try {
-          const product = JSON.parse(entry) as any;
+          const product = parsePricingDoc(entry);
+          if (!product) continue;
           const attrs = product?.product?.attributes ?? {};
 
           // In broad mode, filter down to One Zone storage class variants.
