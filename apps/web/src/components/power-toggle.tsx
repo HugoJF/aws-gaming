@@ -62,7 +62,7 @@ export function PowerToggle({
           'relative h-4 w-4 transition-colors duration-300',
           !isOn &&
             !isProcessing &&
-            'text-muted-foreground group-hover/power:text-foreground',
+            'text-muted-foreground group-hover/power:text-primary',
           isOn && !isProcessing && 'text-primary',
           isBooting && 'text-primary',
           isShuttingDown && 'text-destructive',

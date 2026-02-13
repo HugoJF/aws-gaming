@@ -47,7 +47,7 @@ export function App() {
   }, [showBootstrap]);
 
   const { servers, loading, error: queryError } = useServersQuery(token);
-  const { togglePower, error: mutationError } = usePowerMutation(token);
+  const { togglePower, pendingServerId, error: mutationError } = usePowerMutation(token);
 
   const errorSource = queryError ?? mutationError;
   const isAuthError =
@@ -134,6 +134,7 @@ export function App() {
                   token={token}
                   server={server}
                   onTogglePower={togglePower}
+                  powerPending={pendingServerId === server.id}
                 />
               ))}
             </div>

@@ -29,6 +29,7 @@ export function usePowerMutation(token: string | null) {
 
   return {
     togglePower,
+    pendingServerId: mutation.isPending ? (mutation.variables?.serverId ?? null) : null,
     error: mutation.error,
   };
 }

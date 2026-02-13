@@ -62,13 +62,14 @@ interface ServerCardProps {
   token: string | null;
   server: ServerView;
   onTogglePower: (serverId: string, action: 'on' | 'off') => void;
+  powerPending?: boolean;
 }
 
-export function ServerCard({ token, server, onTogglePower }: ServerCardProps) {
+export function ServerCard({ token, server, onTogglePower, powerPending }: ServerCardProps) {
   const isOnline = server.status === 'online';
   const isBooting = server.status === 'booting';
   const isShuttingDown = server.status === 'shutting-down';
-  const isProcessing = isBooting || isShuttingDown;
+  const isProcessing = isBooting || isShuttingDown || !!powerPending;
 
   const gameConfig = GAME_CONFIG[server.game];
 
@@ -135,8 +136,8 @@ export function ServerCard({ token, server, onTogglePower }: ServerCardProps) {
             <PowerToggle
               isOn={isOnline}
               isProcessing={isProcessing}
-              isBooting={isBooting}
-              isShuttingDown={isShuttingDown}
+              isBooting={isBooting || (!!powerPending && !isOnline)}
+              isShuttingDown={isShuttingDown || (!!powerPending && isOnline)}
               onToggle={handleToggle}
               label={`Toggle server ${server.displayName}`}
             />
