@@ -313,13 +313,22 @@ resource "aws_launch_template" "this" {
 }
 
 resource "aws_autoscaling_group" "this" {
-  name                = local.asg_name
-  min_size            = var.instance_count
-  max_size            = var.instance_count
-  desired_capacity    = var.instance_count
+  name             = local.asg_name
+  min_size         = var.instance_count
+  max_size         = var.instance_count
+  desired_capacity = var.instance_count
   # Pin to single AZ matching the One Zone EFS mount target.
   vpc_zone_identifier = [var.public_subnet_ids[0]]
   health_check_type   = "EC2"
+
+  lifecycle {
+    # Desired capacity is managed by the control plane (API) at runtime.
+    # Terraform should not force servers back on during unrelated deploys.
+    ignore_changes = [
+      min_size,
+      desired_capacity,
+    ]
+  }
 
   launch_template {
     id      = aws_launch_template.this.id
@@ -382,6 +391,13 @@ resource "aws_ecs_service" "this" {
   desired_count                      = var.task_count
   deployment_minimum_healthy_percent = 0
   deployment_maximum_percent         = 100
+
+  lifecycle {
+    # Desired count is managed by the control plane (API) at runtime.
+    ignore_changes = [
+      desired_count,
+    ]
+  }
 
   tags = local.base_tags
 
