@@ -33,6 +33,7 @@ import type {
   ServerHourlyCostEstimate,
 } from '@aws-gaming/contracts';
 import { useServerCostQuery } from '@/hooks/use-server-cost-query';
+import { ApiError } from '@/lib/api';
 
 export type { ServerView };
 
@@ -86,7 +87,11 @@ export function ServerCard({ token, server, onTogglePower }: ServerCardProps) {
   const powerAction = server.powerAction;
   const stages = powerAction?.stages ?? [];
 
-  const { estimate: costEstimate } = useServerCostQuery(token, server.id);
+  const {
+    estimate: costEstimate,
+    loading: costLoading,
+    error: costError,
+  } = useServerCostQuery(token, server.id);
 
   return (
     <div
@@ -153,6 +158,13 @@ export function ServerCard({ token, server, onTogglePower }: ServerCardProps) {
           <InfoChip icon={Globe} value={server.address} mono />
           {costEstimate ? (
             <CostChip estimate={costEstimate} online={isOnline} />
+          ) : costLoading ? (
+            <div className="flex items-center gap-1.5 rounded-md bg-secondary/60 px-2.5 py-1.5 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span>Cost</span>
+            </div>
+          ) : costError ? (
+            <CostErrorChip error={costError} />
           ) : (
             <InfoChip icon={DollarSign} value="Cost n/a" />
           )}
@@ -249,6 +261,44 @@ function CostChip({
             </div>
           </div>
         )}
+      </HoverCardContent>
+    </HoverCard>
+  );
+}
+
+function CostErrorChip({ error }: { error: unknown }) {
+  const message =
+    error instanceof ApiError
+      ? error.body.detail
+        ? `${error.body.error}: ${error.body.detail}`
+        : error.body.error
+      : error instanceof Error
+        ? error.message
+        : String(error);
+
+  return (
+    <HoverCard openDelay={150} closeDelay={100}>
+      <HoverCardTrigger asChild>
+        <div>
+          <InfoChip icon={DollarSign} value="Cost error" />
+        </div>
+      </HoverCardTrigger>
+      <HoverCardContent
+        side="bottom"
+        align="start"
+        className="w-[min(92vw,30rem)] max-w-[30rem] p-0"
+        sideOffset={8}
+      >
+        <div className="border-b border-border px-3 py-2.5">
+          <span className="text-xs font-medium text-foreground">
+            Cost Estimate Failed
+          </span>
+        </div>
+        <div className="px-3 py-2">
+          <div className="text-[11px] text-muted-foreground break-words">
+            {message}
+          </div>
+        </div>
       </HoverCardContent>
     </HoverCard>
   );

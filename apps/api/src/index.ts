@@ -246,11 +246,15 @@ api.get('/servers/:id/cost', async (c) => {
     const estimate = await costService.estimateHourlyCosts(instance);
     return c.json({ serverId: id, estimate } satisfies ServerCostResponse);
   } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
     console.error('Failed to compute cost estimate', {
       instanceId: id,
-      error: error instanceof Error ? error.message : String(error),
+      error: detail,
     });
-    return c.json({ error: 'Failed to compute cost estimate' }, 502);
+    return c.json(
+      { error: 'Failed to compute cost estimate', detail },
+      502,
+    );
   }
 });
 
