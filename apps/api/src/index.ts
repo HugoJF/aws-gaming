@@ -5,6 +5,7 @@ import { createOpaqueToken, hashOpaqueToken, computeTokenStatus } from '@aws-gam
 import type {
   ListServersResponse,
   ServerStatusResponse,
+  ServerCostResponse,
   PowerRequest,
   PowerResponse,
   MeResponse,
@@ -24,6 +25,7 @@ import type {
 import { AsgControl, EcsControl, Ec2Control, DnsControl } from '@aws-gaming/aws-control';
 import { Repository } from './db/repository.js';
 import { StatusService } from './services/status.js';
+import { CostService } from './services/cost.js';
 import {
   createAuthMiddleware,
   createAdminMiddleware,
@@ -52,6 +54,7 @@ const statusService = new StatusService(
   new Ec2Control(REGION),
   new DnsControl(REGION),
 );
+const costService = new CostService(REGION);
 const authMiddleware = createAuthMiddleware(repo);
 const adminMiddleware = createAdminMiddleware();
 
@@ -223,6 +226,32 @@ api.get('/servers/:id/status', async (c) => {
 
   const view = await statusService.buildServerView(instance);
   return c.json({ server: view } satisfies ServerStatusResponse);
+});
+
+/* GET /api/servers/:id/cost — hourly online/offline estimate */
+api.get('/servers/:id/cost', async (c) => {
+  const { gameInstanceIds } = getAuthContext(c);
+  const id = c.req.param('id');
+
+  if (!gameInstanceIds.includes(id)) {
+    return c.json({ error: 'Not authorized for this server' }, 403);
+  }
+
+  const instance = await repo.getInstance(id);
+  if (!instance) {
+    return c.json({ error: 'Server not found' }, 404);
+  }
+
+  try {
+    const estimate = await costService.estimateHourlyCosts(instance);
+    return c.json({ serverId: id, estimate } satisfies ServerCostResponse);
+  } catch (error) {
+    console.error('Failed to compute cost estimate', {
+      instanceId: id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return c.json({ error: 'Failed to compute cost estimate' }, 502);
+  }
 });
 
 /* POST /api/servers/:id/power — power on/off */

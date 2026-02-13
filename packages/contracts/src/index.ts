@@ -183,6 +183,45 @@ export interface ServerStatusResponse {
   server: ServerView;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Cost Estimation                                                   */
+/* ------------------------------------------------------------------ */
+
+export interface CostComponent {
+  id: string;
+  label: string;
+  perHourUsd: number;
+  /** Human-readable detail string (not intended for parsing). */
+  detail?: string;
+}
+
+export interface ServerHourlyCostEstimate {
+  currency: 'USD';
+  onlinePerHourUsd: number;
+  offlinePerHourUsd: number;
+  breakdownOnline: CostComponent[];
+  breakdownOffline: CostComponent[];
+  assumptions: string[];
+  inputs: {
+    awsRegion: string;
+    pricingLocation: string;
+    instanceType: string | null;
+    instanceCount: number;
+    spotMaxPriceUsdPerHour: number | null;
+    ec2OnDemandUsdPerHour: number | null;
+    ec2EffectiveUsdPerHour: number | null;
+    efsFileSystemId: string | null;
+    efsSizeGiB: number | null;
+    efsOneZoneUsdPerGiBMonth: number | null;
+    computedAt: string;
+  };
+}
+
+export interface ServerCostResponse {
+  serverId: string;
+  estimate: ServerHourlyCostEstimate;
+}
+
 export interface PowerRequest {
   action: 'on' | 'off';
 }

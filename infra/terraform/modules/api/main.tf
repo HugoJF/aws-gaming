@@ -165,7 +165,36 @@ data "aws_iam_policy_document" "lambda_permissions" {
     sid    = "Ec2DescribeRead"
     effect = "Allow"
     actions = [
-      "ec2:DescribeInstances"
+      "ec2:DescribeInstances",
+      "ec2:DescribeLaunchTemplateVersions",
+      "ec2:DescribeLaunchTemplates"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "EfsDescribeRead"
+    effect = "Allow"
+    actions = [
+      "elasticfilesystem:DescribeFileSystems"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "TaggingRead"
+    effect = "Allow"
+    actions = [
+      "tag:GetResources"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "PricingRead"
+    effect = "Allow"
+    actions = [
+      "pricing:GetProducts"
     ]
     resources = ["*"]
   }
