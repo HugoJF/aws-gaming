@@ -40,6 +40,7 @@ export type BootStageId =
   | 'starting'
   | 'task_healthy'
   | 'dns_update'
+  | 'dns_resolve'
   | 'game_ready'
   | 'ready';
 
@@ -61,6 +62,9 @@ export interface PowerStage {
   startedAt?: string;
   completedAt?: string;
   error?: string;
+  /** Soft timeout marker. Visual cue only; stage can still complete later. */
+  timedOutAt?: string;
+  timedOutMessage?: string;
 }
 
 export interface PowerAction {
@@ -69,6 +73,8 @@ export interface PowerAction {
   currentStageId: PowerStageId;
   startedAt: string;
   deadlineAt: string;
+  /** Soft overall deadline marker. Visual cue only; action can still complete later. */
+  deadlineExceededAt?: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -308,6 +314,7 @@ export const BOOT_STAGES: readonly { id: BootStageId; label: string }[] = [
   { id: 'starting', label: 'Starting ECS service tasks' },
   { id: 'task_healthy', label: 'Waiting for container health check' },
   { id: 'dns_update', label: 'Updating Route53 DNS record' },
+  { id: 'dns_resolve', label: 'Waiting for DNS to resolve' },
   { id: 'game_ready', label: 'Waiting for game query response' },
   { id: 'ready', label: 'Server ready for players' },
 ] as const;

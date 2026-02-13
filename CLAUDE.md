@@ -1,4 +1,16 @@
 
+## Deployment
+
+All infrastructure is managed via Terraform. Never mutate AWS resources directly (e.g. `aws lambda update-function-code`, `aws ecs update-service`). Always go through Terraform.
+
+- Build the API Lambda first: `bun run build:api:lambda`
+- Then apply: `make tf-apply` (uses `infra/terraform/stack/hello-world.tfvars`)
+- Terraform detects Lambda code changes via `source_code_hash` and deploys automatically.
+- Use `make tf-plan` to preview changes before applying.
+- Validate Terraform syntax: `make tf-validate`
+
+## Bun
+
 Default to using Bun instead of Node.js.
 
 - Use `bun <file>` instead of `node <file>` or `ts-node <file>`

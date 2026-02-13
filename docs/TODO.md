@@ -4,12 +4,13 @@ Last updated: 2026-02-12
 
 ## High Priority
 
-- [ ] Tune CloudWatch attack-detection alarm thresholds for the public API Lambda based on real baseline traffic.
-- [ ] Wire alarm actions (SNS or incident channel) so suspicious traffic patterns page the team.
 - [x] Migrate EFS to One Zone for game workloads now (cost-optimized; avoid later migration overhead; acceptable risk of data loss on AZ-level failure; verify ECS/EC2 placement is pinned to the same AZ as EFS mount target).
 
 ## Medium Priority
 
+- [ ] Instant feedback on power button
+- [ ] Removing Route53 DNS record does not have to exist, cleaning the DNS record is not required
+- [ ] Cost tracking for servers
 - [ ] Tighten remaining API Lambda IAM wildcard permissions where practical.
 - [ ] Add alarms for Lambda errors and elevated duration.
 - [ ] Add alarms for ECS service health mismatch (`runningCount < desiredCount`) and ASG unhealthy instances.
@@ -20,6 +21,8 @@ Last updated: 2026-02-12
 
 ## Low Priority
 
+- [ ] Tune CloudWatch attack-detection alarm thresholds for the public API Lambda based on real baseline traffic.
+- [ ] Wire alarm actions (SNS or incident channel) so suspicious traffic patterns page the team.
 - [ ] Add Terraform deployment pipeline with `plan` artifact + manual approval for `apply`.
 - [ ] Clean up docs and consolidate relevant operational/architecture information.
 - [ ] Split `apps/api/src/index.ts` into multiple files (low).

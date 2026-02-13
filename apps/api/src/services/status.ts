@@ -4,6 +4,7 @@ import {
   Ec2Control,
   DnsControl,
 } from '@aws-gaming/aws-control';
+import { lookup } from 'node:dns/promises';
 import type {
   GameInstance,
   ServerView,
@@ -27,6 +28,7 @@ const STAGE_TIMEOUT_MS: Partial<Record<string, number>> = {
   starting: 60_000,
   task_healthy: 120_000,
   dns_update: 30_000,
+  dns_resolve: 30_000,
   game_ready: 120_000,
   stopping: 120_000,
   dns_clear: 30_000,
@@ -84,22 +86,13 @@ export class StatusService {
     ]);
 
     // Determine current status from AWS state
-    let status: ServerStatus = instance.state ?? 'offline';
+    let observedStatus: ServerStatus = instance.state ?? 'offline';
     if (asgStatus && ecsStatus) {
       if (ecsStatus.runningCount > 0) {
-        status = 'online';
+        observedStatus = 'online';
       } else if (asgStatus.desiredCapacity === 0) {
-        status = 'offline';
+        observedStatus = 'offline';
       }
-    }
-
-    // Preserve booting/shutting-down if a power action is in progress
-    if (powerAction) {
-      status = this.hasFailedStage(powerAction)
-        ? 'error'
-        : powerAction.action === 'on'
-          ? 'booting'
-          : 'shutting-down';
     }
 
     const publicIp = await this.resolvePublicIp(asgStatus);
@@ -107,7 +100,7 @@ export class StatusService {
     // GameDig query (skip if ECS has no running tasks)
     let liveData: LiveData | null = null;
     if (
-      status === 'online' &&
+      observedStatus === 'online' &&
       instance.gameType !== 'generic' &&
       ecsStatus &&
       ecsStatus.runningCount > 0 &&
@@ -118,6 +111,17 @@ export class StatusService {
         host: queryHost,
         port: instance.queryPort ?? instance.hostPort,
       });
+    }
+
+    // Display status: power actions are UX hints and should not override
+    // an actually-online server. Timeouts/errors are visual cues only.
+    let status: ServerStatus = observedStatus;
+    if (powerAction) {
+      if (powerAction.action === 'on') {
+        status = observedStatus === 'online' ? 'online' : 'booting';
+      } else {
+        status = observedStatus === 'offline' ? 'offline' : 'shutting-down';
+      }
     }
 
     // Build health checks
@@ -410,8 +414,11 @@ export class StatusService {
 
     // Check overall deadline
     if (now.getTime() > new Date(action.deadlineAt).getTime()) {
-      await this.failCurrentStage(instance, action, 'Overall deadline exceeded');
-      return;
+      // Soft deadline: keep going, but mark for UI.
+      if (!action.deadlineExceededAt) {
+        action.deadlineExceededAt = now.toISOString();
+        await this.repo.putPowerAction(instance.id, action);
+      }
     }
 
     const currentStage = action.stages.find(
@@ -419,21 +426,13 @@ export class StatusService {
     );
     if (!currentStage) return;
 
-    // Recover from legacy failures on terminal stages caused by short timeout + slow poll.
+    // Soft timeouts mean we should not permanently fail stages.
+    // If a stage previously failed (legacy data), treat it as in-progress.
     if (currentStage.status === 'failed') {
-      const isTerminal =
-        currentStage.id === 'ready' || currentStage.id === 'stopped';
-      if (isTerminal) {
-        const conditionMet = await this.checkStageCondition(
-          instance,
-          action,
-          currentStage.id,
-        );
-        if (conditionMet) {
-          await this.repo.deletePowerAction(instance.id);
-        }
-      }
-      return;
+      currentStage.status = 'in_progress';
+      delete currentStage.completedAt;
+      delete currentStage.error;
+      await this.repo.putPowerAction(instance.id, action);
     }
 
     if (currentStage.status !== 'in_progress') return;
@@ -448,12 +447,9 @@ export class StatusService {
         currentStage.id,
       );
     } catch (error) {
-      await this.failCurrentStage(
-        instance,
-        action,
-        `Stage check failed: ${this.toErrorMessage(error)}`,
-      );
-      return;
+      // Soft error: record it, but keep checking on subsequent polls.
+      currentStage.error = `Stage check failed: ${this.toErrorMessage(error)}`;
+      await this.repo.putPowerAction(instance.id, action);
     }
 
     if (conditionMet) {
@@ -466,12 +462,12 @@ export class StatusService {
       const stageAge = now.getTime() - new Date(currentStage.startedAt).getTime();
       const maxAge = STAGE_TIMEOUT_MS[currentStage.id] ?? 120_000;
       if (stageAge > maxAge) {
-        await this.failCurrentStage(
-          instance,
-          action,
-          `Stage timed out after ${Math.round(stageAge / 1000)}s`,
-        );
-        return;
+        // Soft timeout: mark it once for UI, but keep checking for recovery.
+        if (!currentStage.timedOutAt) {
+          currentStage.timedOutAt = now.toISOString();
+          currentStage.timedOutMessage = `Timed out after ${Math.round(stageAge / 1000)}s`;
+          await this.repo.putPowerAction(instance.id, action);
+        }
       }
     }
 
@@ -544,12 +540,34 @@ export class StatusService {
           publicIp,
         );
       }
+      case 'dns_resolve': {
+        if (!instance.dnsName) return true;
+
+        // If we can determine the expected public IP, wait until DNS resolves to it.
+        // This keeps "DNS ready" separate from the game query probe.
+        const expectedIp =
+          (await this.resolvePublicIp(
+            await this.asg.describe(instance.autoScalingGroupName),
+          )) ?? null;
+
+        try {
+          const resolved = await lookup(instance.dnsName, { family: 4 });
+          if (!resolved.address) return false;
+          return expectedIp ? resolved.address === expectedIp : true;
+        } catch {
+          return false;
+        }
+      }
       case 'game_ready': {
         if (instance.gameType === 'generic') return true;
 
-        const host = instance.dnsName ?? await this.resolvePublicIp(
-          await this.asg.describe(instance.autoScalingGroupName),
-        );
+        // Query readiness should reflect what players will use. If DNS is configured,
+        // we query via the DNS name (dns_resolve stage should ensure it propagates).
+        const host =
+          instance.dnsName ??
+          (await this.resolvePublicIp(
+            await this.asg.describe(instance.autoScalingGroupName),
+          ));
         if (!host) return true;
 
         const liveData = await queryGameServer({
@@ -628,6 +646,10 @@ export class StatusService {
       ...action.stages[currentIndex],
       status: 'completed',
       completedAt: now,
+      // Clear transient UI markers.
+      error: undefined,
+      timedOutAt: undefined,
+      timedOutMessage: undefined,
     };
 
     const nextIndex = currentIndex + 1;

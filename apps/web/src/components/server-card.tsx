@@ -78,7 +78,8 @@ export function ServerCard({ server, onTogglePower }: ServerCardProps) {
 
   const overallHealth = getOverallHealth(server.healthChecks);
 
-  const stages = server.powerAction?.stages ?? [];
+  const powerAction = server.powerAction;
+  const stages = powerAction?.stages ?? [];
 
   return (
     <div
@@ -154,9 +155,9 @@ export function ServerCard({ server, onTogglePower }: ServerCardProps) {
         </div>
 
         {/* Boot / Shutdown sequence (API-driven stages) */}
-        {stages.length > 0 && (
+        {powerAction && stages.length > 0 && (
           <BootSequence
-            type={isBooting ? 'boot' : 'shutdown'}
+            type={powerAction.action === 'on' ? 'boot' : 'shutdown'}
             stages={stages}
           />
         )}

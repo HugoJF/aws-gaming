@@ -1,7 +1,9 @@
 import { GameDig } from 'gamedig';
 import type { GameType, LiveData } from '@aws-gaming/contracts';
 
-const QUERY_TIMEOUT_MS = 1_500;
+const SOCKET_TIMEOUT_MS = 1_500;
+// Must be greater than socketTimeout or GameDig will reliably time out.
+const ATTEMPT_TIMEOUT_MS = 10_000;
 
 /** Map our GameType to gamedig's type string */
 const GAMEDIG_TYPE: Record<Exclude<GameType, 'generic'>, string> = {
@@ -27,8 +29,8 @@ export async function queryGameServer(
       type: GAMEDIG_TYPE[input.gameType],
       host: input.host,
       port: input.port,
-      socketTimeout: QUERY_TIMEOUT_MS,
-      attemptTimeout: QUERY_TIMEOUT_MS,
+      socketTimeout: SOCKET_TIMEOUT_MS,
+      attemptTimeout: ATTEMPT_TIMEOUT_MS,
       givenPortOnly: true,
     });
 
