@@ -336,12 +336,10 @@ export class StatusService {
     const host = instance.dnsName ?? status.publicIp ?? instance.id;
     const address = `${host}:${instance.hostPort}`;
 
-    // Health sidecar is plain HTTP, and is meant for control-plane probes
-    // (not a user-facing HTTPS endpoint).
     const healthHost = status.publicIp ?? instance.dnsName;
     const healthEndpoint =
       healthHost && status.status !== 'offline'
-        ? `http://${healthHost}:${instance.healthPort}`
+        ? `${healthHost}:${instance.healthPort}`
         : null;
 
     return {

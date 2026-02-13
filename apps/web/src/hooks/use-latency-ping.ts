@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { api } from '@/lib/api';
 
 /** Ping intervals by server status (ms) */
 const PING_INTERVALS: Record<string, number> = {
@@ -10,16 +9,25 @@ const PING_INTERVALS: Record<string, number> = {
 const PING_TIMEOUT_MS = 4_000;
 
 interface UseLatencyPingOptions {
-  token: string | null;
-  serverId: string;
+  /** e.g. "1.2.3.4:8080" or "minecraft.aws.hugo.dev.br:8080" */
+  healthEndpoint: string | null;
   status: string;
 }
 
-export function useLatencyPing({ token, serverId, status }: UseLatencyPingOptions) {
+export function useLatencyPing({ healthEndpoint, status }: UseLatencyPingOptions) {
   const [latency, setLatency] = useState<number | null>(null);
   const [pinging, setPinging] = useState(false);
   const mountedRef = useRef(true);
   const inFlightRef = useRef(false);
+  const controllerRef = useRef<AbortController | null>(null);
+
+  const buildPingUrl = (endpoint: string): string => {
+    const trimmed = endpoint.trim().replace(/\/+$/, '');
+    if (/^https?:\/\//i.test(trimmed)) return `${trimmed}/ping`;
+
+    // Health sidecar is plain HTTP in current infra.
+    return `http://${trimmed}/ping`;
+  };
 
   useEffect(() => {
     mountedRef.current = true;
@@ -29,7 +37,7 @@ export function useLatencyPing({ token, serverId, status }: UseLatencyPingOption
   }, []);
 
   useEffect(() => {
-    if (!token || !serverId) {
+    if (!healthEndpoint) {
       setLatency(null);
       return;
     }
@@ -46,40 +54,49 @@ export function useLatencyPing({ token, serverId, status }: UseLatencyPingOption
       return;
     }
 
+    const url = buildPingUrl(healthEndpoint);
+
     const doPing = async () => {
       if (!mountedRef.current || inFlightRef.current) return;
       inFlightRef.current = true;
       setPinging(true);
-      const timeout = window.setTimeout(() => {
-        // best-effort; api call has its own server-side timeout too
-      }, PING_TIMEOUT_MS);
+
+      const start = performance.now();
+      const controller = new AbortController();
+      controllerRef.current = controller;
+      const timeout = window.setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
 
       try {
-        const res = await api.pingServer(token, serverId);
-        if (mountedRef.current) {
-          setLatency(res.latencyMs);
-        }
+        await fetch(url, {
+          method: 'GET',
+          // Latency probe only; avoid requiring CORS headers on sidecar.
+          mode: 'no-cors',
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        const ms = Math.round(performance.now() - start);
+        if (mountedRef.current) setLatency(ms);
       } catch {
-        if (mountedRef.current) {
-          setLatency(null);
-        }
+        if (mountedRef.current) setLatency(null);
       } finally {
         window.clearTimeout(timeout);
         if (mountedRef.current) setPinging(false);
         inFlightRef.current = false;
+        if (controllerRef.current === controller) controllerRef.current = null;
       }
     };
 
-    // First ping immediately
     doPing();
-
     const timer = setInterval(doPing, interval);
     return () => {
       clearInterval(timer);
+      controllerRef.current?.abort();
+      controllerRef.current = null;
       inFlightRef.current = false;
       if (mountedRef.current) setPinging(false);
     };
-  }, [token, serverId, status]);
+  }, [healthEndpoint, status]);
 
   return { latency, pinging };
 }
+

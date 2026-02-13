@@ -74,8 +74,7 @@ export function ServerCard({ token, server, onTogglePower, powerPending }: Serve
   const gameConfig = GAME_CONFIG[server.game];
 
   const { latency, pinging } = useLatencyPing({
-    token,
-    serverId: server.id,
+    healthEndpoint: server.healthEndpoint,
     status: server.status,
   });
 
