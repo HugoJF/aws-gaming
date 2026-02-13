@@ -2,6 +2,7 @@ import type {
   ListServersResponse,
   ServerStatusResponse,
   ServerCostResponse,
+  ServerPingResponse,
   PowerResponse,
   ErrorResponse,
   MeResponse,
@@ -90,6 +91,10 @@ export const api = {
 
   getServerCost(token: string, serverId: string) {
     return request<ServerCostResponse>(`/api/servers/${serverId}/cost`, token);
+  },
+
+  pingServer(token: string, serverId: string) {
+    return request<ServerPingResponse>(`/api/servers/${serverId}/ping`, token);
   },
 
   powerAction(token: string, serverId: string, action: 'on' | 'off') {

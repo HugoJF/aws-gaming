@@ -6,6 +6,7 @@ import type {
   ListServersResponse,
   ServerStatusResponse,
   ServerCostResponse,
+  ServerPingResponse,
   PowerRequest,
   PowerResponse,
   MeResponse,
@@ -253,6 +254,75 @@ api.get('/servers/:id/cost', async (c) => {
     });
     return c.json(
       { error: 'Failed to compute cost estimate', detail },
+      502,
+    );
+  }
+});
+
+/* GET /api/servers/:id/ping — server health-sidecar probe (HTTPS-friendly) */
+api.get('/servers/:id/ping', async (c) => {
+  const { gameInstanceIds } = getAuthContext(c);
+  const id = c.req.param('id');
+
+  if (!gameInstanceIds.includes(id)) {
+    return c.json({ error: 'Not authorized for this server' }, 403);
+  }
+
+  const instance = await repo.getInstance(id);
+  if (!instance) {
+    return c.json({ error: 'Server not found' }, 404);
+  }
+
+  // If the server is offline, avoid hitting AWS/Pricing/etc. Just return "not ok".
+  if (instance.state === 'offline') {
+    return c.json({
+      serverId: id,
+      ok: false,
+      latencyMs: null,
+    } satisfies ServerPingResponse);
+  }
+
+  try {
+    const view = await statusService.buildServerView(instance);
+    if (!view.healthEndpoint) {
+      return c.json({
+        serverId: id,
+        ok: false,
+        latencyMs: null,
+      } satisfies ServerPingResponse);
+    }
+
+    // Health sidecar is plain HTTP. The browser cannot reliably probe this
+    // (mixed content / TLS), so the API does it and returns a small result.
+    const url = view.healthEndpoint.replace(/\/+$/, '') + '/ping';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3_000);
+    const start = Date.now();
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+
+      const latencyMs = Date.now() - start;
+      return c.json({
+        serverId: id,
+        ok: res.ok,
+        latencyMs,
+        statusCode: res.status,
+      } satisfies ServerPingResponse);
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error('Failed to ping server health endpoint', {
+      instanceId: id,
+      error: detail,
+    });
+    return c.json(
+      { error: 'Failed to ping server health endpoint', detail },
       502,
     );
   }

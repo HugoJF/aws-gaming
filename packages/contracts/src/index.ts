@@ -222,6 +222,14 @@ export interface ServerCostResponse {
   estimate: ServerHourlyCostEstimate;
 }
 
+export interface ServerPingResponse {
+  serverId: string;
+  ok: boolean;
+  /** Latency measured by the API when probing the server health sidecar. */
+  latencyMs: number | null;
+  statusCode?: number;
+}
+
 export interface PowerRequest {
   action: 'on' | 'off';
 }
