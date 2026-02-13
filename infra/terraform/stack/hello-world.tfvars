@@ -53,6 +53,13 @@ game_instances = {
       "mkdir -p /www && echo 'hello-world' >/www/index.html && exec httpd -f -p 80 -h /www",
     ]
     container_environment        = {}
+    container_health_check = {
+      command      = ["CMD-SHELL", "wget -q -O- http://127.0.0.1:80/ >/dev/null || exit 1"]
+      interval     = 30
+      timeout      = 5
+      retries      = 3
+      start_period = 10
+    }
     host_port                   = 80
     instance_type               = "t3.micro"
     container_memory_reservation = 64
