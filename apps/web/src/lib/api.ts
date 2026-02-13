@@ -1,6 +1,7 @@
 import type {
   ListServersResponse,
   ServerStatusResponse,
+  ServerCostResponse,
   PowerResponse,
   ErrorResponse,
   MeResponse,
@@ -85,6 +86,10 @@ export const api = {
       `/api/servers/${serverId}/status`,
       token,
     );
+  },
+
+  getServerCost(token: string, serverId: string) {
+    return request<ServerCostResponse>(`/api/servers/${serverId}/cost`, token);
   },
 
   powerAction(token: string, serverId: string, action: 'on' | 'off') {

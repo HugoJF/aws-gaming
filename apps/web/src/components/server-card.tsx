@@ -15,6 +15,7 @@ import {
   Globe,
   MapPin,
   Users,
+  DollarSign,
   CircleCheck,
   CircleX,
   CircleMinus,
@@ -28,7 +29,10 @@ import type {
   GameType,
   HealthCheck,
   HealthCheckStatus,
+  CostComponent,
+  ServerHourlyCostEstimate,
 } from '@aws-gaming/contracts';
+import { useServerCostQuery } from '@/hooks/use-server-cost-query';
 
 export type { ServerView };
 
@@ -54,11 +58,12 @@ const GAME_CONFIG: Record<
 };
 
 interface ServerCardProps {
+  token: string | null;
   server: ServerView;
   onTogglePower: (serverId: string, action: 'on' | 'off') => void;
 }
 
-export function ServerCard({ server, onTogglePower }: ServerCardProps) {
+export function ServerCard({ token, server, onTogglePower }: ServerCardProps) {
   const isOnline = server.status === 'online';
   const isBooting = server.status === 'booting';
   const isShuttingDown = server.status === 'shutting-down';
@@ -80,6 +85,8 @@ export function ServerCard({ server, onTogglePower }: ServerCardProps) {
 
   const powerAction = server.powerAction;
   const stages = powerAction?.stages ?? [];
+
+  const { estimate: costEstimate } = useServerCostQuery(token, server.id);
 
   return (
     <div
@@ -144,6 +151,11 @@ export function ServerCard({ server, onTogglePower }: ServerCardProps) {
           />
           <InfoChip icon={MapPin} value={server.location} />
           <InfoChip icon={Globe} value={server.address} mono />
+          {costEstimate ? (
+            <CostChip estimate={costEstimate} online={isOnline} />
+          ) : (
+            <InfoChip icon={DollarSign} value="Cost n/a" />
+          )}
           {isOnline && pinging && latency === null && (
             <div className="ml-auto flex items-center gap-1.5 rounded-md bg-secondary/60 px-2.5 py-1.5 text-xs text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -167,6 +179,100 @@ export function ServerCard({ server, onTogglePower }: ServerCardProps) {
 }
 
 /* -- Helpers -------------------------------------------------- */
+
+function CostChip({
+  estimate,
+  online,
+}: {
+  estimate: ServerHourlyCostEstimate;
+  online: boolean;
+}) {
+  const value = online
+    ? `$${estimate.onlinePerHourUsd.toFixed(3)}/hr`
+    : `$${estimate.offlinePerHourUsd.toFixed(3)}/hr`;
+
+  const breakdown = online ? estimate.breakdownOnline : estimate.breakdownOffline;
+
+  return (
+    <HoverCard openDelay={150} closeDelay={100}>
+      <HoverCardTrigger asChild>
+        <div>
+          <InfoChip icon={DollarSign} value={value} mono />
+        </div>
+      </HoverCardTrigger>
+      <HoverCardContent
+        side="bottom"
+        align="start"
+        className="w-[min(92vw,30rem)] max-w-[30rem] p-0"
+        sideOffset={8}
+      >
+        <div className="border-b border-border px-3 py-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-medium text-foreground">
+              Hourly Cost Estimate
+            </span>
+            <span className="font-mono text-[11px] text-muted-foreground">
+              {estimate.currency}
+            </span>
+          </div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+            <span className="font-mono">
+              Online ${estimate.onlinePerHourUsd.toFixed(3)}/hr
+            </span>
+            <span className="font-mono">
+              Offline ${estimate.offlinePerHourUsd.toFixed(3)}/hr
+            </span>
+          </div>
+        </div>
+
+        <div className="py-1">
+          {breakdown.length === 0 ? (
+            <div className="px-3 py-2 text-xs text-muted-foreground">
+              No breakdown available.
+            </div>
+          ) : (
+            breakdown.map((c) => <CostRow key={c.id} component={c} />)
+          )}
+        </div>
+
+        {estimate.assumptions.length > 0 && (
+          <div className="border-t border-border px-3 py-2">
+            <div className="text-[11px] font-medium text-foreground">
+              Assumptions
+            </div>
+            <div className="mt-1 space-y-1">
+              {estimate.assumptions.slice(0, 3).map((a) => (
+                <div key={a} className="text-[11px] text-muted-foreground">
+                  {a}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </HoverCardContent>
+    </HoverCard>
+  );
+}
+
+function CostRow({ component }: { component: CostComponent }) {
+  return (
+    <div className="flex items-start justify-between gap-3 px-3 py-2">
+      <div className="min-w-0">
+        <div className="truncate text-xs text-foreground">
+          {component.label}
+        </div>
+        {component.detail && (
+          <div className="mt-0.5 text-[11px] text-muted-foreground">
+            {component.detail}
+          </div>
+        )}
+      </div>
+      <div className="shrink-0 font-mono text-[11px] text-muted-foreground">
+        ${component.perHourUsd.toFixed(3)}/hr
+      </div>
+    </div>
+  );
+}
 
 function getOverallHealth(
   checks?: HealthCheck[],

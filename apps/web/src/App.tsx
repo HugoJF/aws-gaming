@@ -131,6 +131,7 @@ export function App() {
               {servers.map((server) => (
                 <ServerCard
                   key={server.id}
+                  token={token}
                   server={server}
                   onTogglePower={togglePower}
                 />
