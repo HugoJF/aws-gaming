@@ -1,42 +1,36 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 
 const STORAGE_KEY = 'serverdeck_token';
 const TOKEN_PREFIX = '/t/';
 
-function extractTokenFromUrl(): string | null {
-  const path = window.location.pathname;
+function extractTokenFromPath(path: string): string | null {
   if (!path.startsWith(TOKEN_PREFIX)) return null;
   const token = path.slice(TOKEN_PREFIX.length);
   return token.length > 0 ? token : null;
 }
 
-function syncUrlToToken(token: string | null) {
-  const current = extractTokenFromUrl();
-  if (token && current !== token) {
-    window.history.replaceState(null, '', `${TOKEN_PREFIX}${token}`);
-  } else if (!token && current) {
-    window.history.replaceState(null, '', '/');
+function initialToken(): string | null {
+  const fromUrl = extractTokenFromPath(window.location.pathname);
+  if (fromUrl) {
+    localStorage.setItem(STORAGE_KEY, fromUrl);
+    return fromUrl;
   }
+
+  return localStorage.getItem(STORAGE_KEY);
 }
 
 export function useAuth() {
-  const [token, setToken] = useState<string | null>(() => {
-    const fromUrl = extractTokenFromUrl();
-    if (fromUrl) {
-      localStorage.setItem(STORAGE_KEY, fromUrl);
-      return fromUrl;
-    }
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      syncUrlToToken(stored);
-    }
-    return stored;
-  });
+  const location = useLocation();
+  const [token, setToken] = useState<string | null>(initialToken);
 
-  // Keep URL in sync whenever token changes
   useEffect(() => {
-    syncUrlToToken(token);
-  }, [token]);
+    const fromUrl = extractTokenFromPath(location.pathname);
+    if (!fromUrl) return;
+
+    localStorage.setItem(STORAGE_KEY, fromUrl);
+    setToken((current) => (current === fromUrl ? current : fromUrl));
+  }, [location.pathname]);
 
   // Listen for storage changes from other tabs
   useEffect(() => {

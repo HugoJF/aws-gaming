@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Navigate, Route, Routes } from 'react-router-dom';
+import type { ServerView } from '@aws-gaming/contracts';
 import { useAuth } from '@/hooks/use-auth';
 import { useServersQuery } from '@/hooks/use-servers-query';
 import { usePowerMutation } from '@/hooks/use-power-mutation';
@@ -39,13 +41,6 @@ export function App() {
     setSkipBootstrapCheck(true);
   }, []);
 
-  useEffect(() => {
-    const path = showBootstrap ? '/bootstrap' : '/';
-    if (window.location.pathname !== path) {
-      window.history.replaceState(null, '', path);
-    }
-  }, [showBootstrap]);
-
   const { servers, loading, error: queryError } = useServersQuery(token);
   const { togglePower, pendingServerId, error: mutationError } = usePowerMutation(token);
 
@@ -65,27 +60,73 @@ export function App() {
     ? getHttpErrorMessage(errorSource, 'Failed to load servers')
     : null;
 
-  if (!isAuthenticated) {
-    if (showBootstrap) {
-      return (
-        <BootstrapScreen
-          onTokenSubmit={handleTokenSubmit}
-          onBootstrapCompleted={markBootstrapAsComplete}
-          onBootstrapUnavailable={markBootstrapAsComplete}
-          authError={authError}
-          onDismissAuthError={() => setAuthError(null)}
-        />
-      );
-    }
-    return (
-      <UnauthedScreen
+  const bootstrapRoute = showBootstrap
+    ? (
+      <BootstrapScreen
         onTokenSubmit={handleTokenSubmit}
+        onBootstrapCompleted={markBootstrapAsComplete}
+        onBootstrapUnavailable={markBootstrapAsComplete}
         authError={authError}
         onDismissAuthError={() => setAuthError(null)}
       />
-    );
-  }
+    )
+    : <Navigate to="/" replace />;
 
+  const rootRoute = isAuthenticated
+    ? <DashboardRoute
+        token={token!}
+        isAdmin={isAdmin}
+        currentView={currentView}
+        onViewChange={setCurrentView}
+        servers={servers}
+        loading={loading}
+        error={error}
+        onTogglePower={togglePower}
+        pendingServerId={pendingServerId}
+      />
+    : showBootstrap
+      ? <Navigate to="/bootstrap" replace />
+      : <UnauthedScreen
+          onTokenSubmit={handleTokenSubmit}
+          authError={authError}
+          onDismissAuthError={() => setAuthError(null)}
+        />;
+
+  const defaultRoute = showBootstrap ? '/bootstrap' : '/';
+
+  return (
+    <Routes>
+      <Route path="/" element={rootRoute} />
+      <Route path="/bootstrap" element={bootstrapRoute} />
+      <Route path="/t/:token" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to={defaultRoute} replace />} />
+    </Routes>
+  );
+}
+
+interface DashboardRouteProps {
+  token: string;
+  isAdmin: boolean;
+  currentView: 'servers' | 'admin';
+  onViewChange: (view: 'servers' | 'admin') => void;
+  servers: ServerView[];
+  loading: boolean;
+  error: string | null;
+  onTogglePower: (serverId: string, action: 'on' | 'off') => void;
+  pendingServerId: string | null;
+}
+
+function DashboardRoute({
+  token,
+  isAdmin,
+  currentView,
+  onViewChange,
+  servers,
+  loading,
+  error,
+  onTogglePower,
+  pendingServerId,
+}: DashboardRouteProps) {
   const onlineCount = servers.filter(
     (s) => s.status === 'online' || s.status === 'booting',
   ).length;
@@ -97,7 +138,7 @@ export function App() {
         onlineCount={onlineCount}
         isAdmin={isAdmin}
         currentView={currentView}
-        onViewChange={setCurrentView}
+        onViewChange={onViewChange}
       />
 
       {currentView === 'admin' ? (
@@ -133,7 +174,7 @@ export function App() {
                   key={server.id}
                   token={token}
                   server={server}
-                  onTogglePower={togglePower}
+                  onTogglePower={onTogglePower}
                   powerPending={pendingServerId === server.id}
                 />
               ))}

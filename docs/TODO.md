@@ -22,4 +22,4 @@ Last updated: 2026-02-21
 - [x] Split `apps/api/src/index.ts` into multiple files (low).
 - [x] Document how DynamoDB is set up and managed in this project (low).
 - [x] Assume health sidecar is always enabled and remove conditional branches (`health_sidecar_enabled`) to simplify Terraform/module concat logic.
-- [ ] Use a routing library instead of manual `history.replaceState` URL syncing in `App.tsx`.
+- [x] Use a routing library instead of manual `history.replaceState` URL syncing in `App.tsx`.
