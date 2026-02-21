@@ -110,9 +110,3 @@ Current docs:
 - `infra/terraform/README.md`
 - `README.md`
 - `docs/TODO.md` / `docs/BUGS.md`
-
-Historical planning docs (not canonical for current behavior):
-- `docs/session-handoff.md`
-- `docs/api-layer-plan.md`
-- `docs/admin-api-plan.md`
-- `docs/cost-tracking.md`
