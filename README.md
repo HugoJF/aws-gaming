@@ -7,16 +7,18 @@ Game server control plane monorepo:
 
 ## Readme Index
 
-- `apps/README.md`
-- `apps/api/README.md`
-- `apps/web/README.md`
-- `packages/README.md`
-- `packages/contracts/README.md`
-- `packages/config/README.md`
-- `packages/auth-links/README.md`
-- `packages/aws-control/README.md`
-- `infra/README.md`
-- `infra/terraform/README.md`
+| Directory | Description |
+|-----------|-------------|
+| [`apps/`](apps/README.md) | Application workspace root |
+| [`apps/api/`](apps/api/README.md) | Hono API (Lambda) |
+| [`apps/web/`](apps/web/README.md) | React dashboard (Vite) |
+| [`packages/`](packages/README.md) | Shared packages root |
+| [`packages/contracts/`](packages/contracts/README.md) | Shared TypeScript types |
+| [`packages/config/`](packages/config/README.md) | Environment variable helpers |
+| [`packages/auth-links/`](packages/auth-links/README.md) | Token creation, hashing, and revocation |
+| [`packages/aws-control/`](packages/aws-control/README.md) | ASG, ECS, EC2, and Route53 wrappers |
+| [`infra/`](infra/README.md) | Infrastructure root |
+| [`infra/terraform/`](infra/terraform/README.md) | Terraform modules |
 
 ## Prerequisites
 
