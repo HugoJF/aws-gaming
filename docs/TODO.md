@@ -19,7 +19,7 @@ Last updated: 2026-02-21
 - [ ] Wire alarm actions (SNS or incident channel) so suspicious traffic patterns page the team.
 - [ ] Add Terraform deployment pipeline with `plan` artifact + manual approval for `apply`.
 - [ ] Clean up docs and consolidate relevant operational/architecture information.
-- [ ] Split `apps/api/src/index.ts` into multiple files (low).
+- [x] Split `apps/api/src/index.ts` into multiple files (low).
 - [ ] Document how DynamoDB is set up and managed in this project (low).
 - [x] Assume health sidecar is always enabled and remove conditional branches (`health_sidecar_enabled`) to simplify Terraform/module concat logic.
 - [ ] Use a routing library instead of manual `history.replaceState` URL syncing in `App.tsx`.
