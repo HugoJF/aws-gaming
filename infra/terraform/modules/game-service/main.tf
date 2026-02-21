@@ -14,7 +14,6 @@ locals {
   asg_name               = "${local.name_prefix}-${var.game_instance_id}-asg"
   capacity_provider_name = "cp-${local.name_prefix}-${var.game_instance_id}"
   cluster_name           = element(reverse(split("/", var.ecs_cluster_arn)), 0)
-  health_sidecar_enabled = try(trimspace(var.health_sidecar_image) != "", false)
 
   base_tags = merge(var.tags, {
     Project      = var.project_name
@@ -81,7 +80,7 @@ locals {
         }
       )
     ],
-    local.health_sidecar_enabled ? [
+    [
       {
         name              = "health-sidecar"
         image             = var.health_sidecar_image
@@ -115,7 +114,7 @@ locals {
           }
         }
       }
-    ] : []
+    ]
   )
 }
 
@@ -199,9 +198,7 @@ resource "aws_vpc_security_group_ingress_rule" "service" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "health" {
-  for_each = local.health_sidecar_enabled ? {
-    for cidr in var.allowed_ingress_cidrs : cidr => cidr
-  } : {}
+  for_each = toset(var.allowed_ingress_cidrs)
 
   security_group_id = aws_security_group.instance.id
   cidr_ipv4         = each.value

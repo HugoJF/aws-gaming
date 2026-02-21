@@ -3,7 +3,7 @@
 ## Layout
 
 - `modules/platform`: shared resources (VPC, public subnets, ECS cluster)
-- `modules/game-service`: per-game ECS-on-EC2 resources (security group, ASG, task, service, optional health sidecar)
+- `modules/game-service`: per-game ECS-on-EC2 resources (security group, ASG, task, service, health sidecar)
 - `modules/api`: API resources (Lambda + Function URL + DynamoDB + IAM)
 - `stack`: single environment entrypoint (default workspace)
 
@@ -110,7 +110,7 @@ Behavior enforced by stack wiring:
 - `container_port` is always equal to `host_port`.
 - Host and health ingress always include stack default CIDRs; `extra_ingress_cidrs` are additive.
 
-When `health_sidecar_image` is set, Terraform adds:
+Terraform adds:
 
 - A second ECS container (`health-sidecar`) in the task definition
 - Security group ingress for `health_port` for `allowed_ingress_cidrs`

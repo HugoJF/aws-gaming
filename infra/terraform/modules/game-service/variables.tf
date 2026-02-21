@@ -171,9 +171,8 @@ variable "efs_owner_gid" {
 }
 
 variable "health_sidecar_image" {
-  description = "Optional health sidecar container image. If null, no sidecar container is deployed."
+  description = "Health sidecar container image."
   type        = string
-  default     = null
 }
 
 variable "tags" {
