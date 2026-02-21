@@ -10,7 +10,7 @@ Last updated: 2026-02-21
 - [ ] Add alarms for Lambda errors and elevated duration.
 - [ ] Add alarms for ECS service health mismatch (`runningCount < desiredCount`) and ASG unhealthy instances.
 - [x] Revisit Bootstrap screen code after TanStack Query integration; simplify flow and split logic into smaller maintainable pieces (code quality, not visual redesign).
-- [ ] Remove Terraform configurability for `function_url_auth_type`; hardcode API Function URL auth type to `NONE`.
+- [x] Remove Terraform configurability for `function_url_auth_type`; hardcode API Function URL auth type to `NONE`.
 - [ ] Fix `GET https://minecraft.aws.hugo.dev.br:8080/ping` failing with `net::ERR_SSL_PROTOCOL_ERROR`.
 
 ## Low Priority

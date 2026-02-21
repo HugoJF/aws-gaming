@@ -100,17 +100,6 @@ variable "api_log_retention_days" {
   default     = 14
 }
 
-variable "api_function_url_auth_type" {
-  description = "Lambda Function URL auth type for API (NONE or AWS_IAM)"
-  type        = string
-  default     = "NONE"
-
-  validation {
-    condition     = contains(["NONE", "AWS_IAM"], var.api_function_url_auth_type)
-    error_message = "api_function_url_auth_type must be NONE or AWS_IAM."
-  }
-}
-
 variable "api_function_url_cors_allow_origins" {
   description = "Allowed CORS origins for the API Function URL"
   type        = list(string)

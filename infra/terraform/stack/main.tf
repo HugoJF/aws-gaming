@@ -113,7 +113,6 @@ module "api" {
   lambda_architectures                  = var.api_lambda_architectures
   dynamodb_table_name                   = var.api_dynamodb_table_name
   log_retention_days                    = var.api_log_retention_days
-  function_url_auth_type                = var.api_function_url_auth_type
   function_url_cors_allow_origins       = var.api_function_url_cors_allow_origins
   function_url_cors_allow_methods       = var.api_function_url_cors_allow_methods
   function_url_cors_allow_headers       = var.api_function_url_cors_allow_headers

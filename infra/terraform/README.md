@@ -126,7 +126,6 @@ Key API variables in `stack/variables.tf`:
 - `api_lambda_zip_path` (default `../../../apps/api/dist/lambda.zip`)
 - `api_lambda_memory_size` / `api_lambda_timeout_seconds`
 - `api_lambda_reserved_concurrent_executions` (default `null`; set to a number to cap API concurrency)
-- `api_function_url_auth_type` (`NONE` or `AWS_IAM`)
 - `api_function_url_cors_allow_origins` / methods / headers
 - `api_dynamodb_table_name` (optional override)
 - `api_environment_variables` (additional Lambda env vars)
@@ -134,7 +133,6 @@ Key API variables in `stack/variables.tf`:
 
 ## Security and abuse controls
 
-- API is designed to run publicly when `api_function_url_auth_type = "NONE"`.
 - API Lambda IAM write actions are scoped to stack-managed ECS services and ASGs.
 - Attack-signal alarms can be enabled for Lambda invocation/error/throttle/concurrency spikes.
 - Reserved concurrency can cap Lambda scale during abuse bursts.

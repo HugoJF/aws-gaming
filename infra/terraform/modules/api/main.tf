@@ -247,7 +247,7 @@ resource "aws_lambda_function" "api" {
 
 resource "aws_lambda_function_url" "api" {
   function_name      = aws_lambda_function.api.function_name
-  authorization_type = var.function_url_auth_type
+  authorization_type = "NONE"
 
   cors {
     allow_credentials = false
@@ -259,8 +259,6 @@ resource "aws_lambda_function_url" "api" {
 }
 
 resource "aws_lambda_permission" "public_function_url" {
-  count = var.function_url_auth_type == "NONE" ? 1 : 0
-
   statement_id           = "AllowPublicFunctionUrlInvoke"
   action                 = "lambda:InvokeFunctionUrl"
   function_name          = aws_lambda_function.api.function_name
@@ -269,8 +267,6 @@ resource "aws_lambda_permission" "public_function_url" {
 }
 
 resource "aws_lambda_permission" "public_function_invoke" {
-  count = var.function_url_auth_type == "NONE" ? 1 : 0
-
   statement_id  = "AllowPublicFunctionInvoke"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.api.function_name
