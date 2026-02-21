@@ -4,9 +4,14 @@ Hono API deployed as AWS Lambda Function URL.
 
 ## Entry Points
 
-- Source: `apps/api/src/index.ts`
+- Lambda entrypoint: `apps/api/src/index.ts`
 - Lambda handler export: `handler`
-- Local routes now: `GET /`, `GET /health`
+- Route modules:
+  - `apps/api/src/routes/bootstrap.ts`
+  - `apps/api/src/routes/authenticated-api.ts`
+  - `apps/api/src/routes/admin.ts`
+
+Current endpoint surface is documented in `docs/operations-architecture.md`.
 
 ## Commands
 

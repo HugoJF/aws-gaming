@@ -1,5 +1,7 @@
 # Cost Tracking (Per Server)
 
+> Historical note: This planning document is preserved for context and may be stale. Use `docs/operations-architecture.md` for current architecture/operations.
+
 Goal: "per-server" cost tracking with (a) hourly updates and (b) last-30-days view and/or 30-day forecast.
 
 Reality check: AWS billing data is not real-time. You can get **hourly buckets** of cost data, but the data itself arrives with **lag**. If you need "updates every hour", you usually implement an **estimator** and reconcile later with billing-accurate sources.

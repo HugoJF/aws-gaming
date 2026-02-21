@@ -1,5 +1,7 @@
 # TODO: API Layer for Game Server Dashboard
 
+> Historical note: This planning document is preserved for context and may be stale. Use `docs/operations-architecture.md` for current architecture/operations.
+
 ## Context
 
 The frontend dashboard is built (server cards with power toggles, boot sequences, health checks, latency). It currently uses hardcoded mock data. We need the real API layer so the frontend can list servers, poll status, and control power — backed by ECS/ASG infrastructure and GameDig for live game data.

@@ -1,5 +1,7 @@
 # Admin API Plan
 
+> Historical note: This planning document is preserved for context and may be stale. Use `docs/operations-architecture.md` for current architecture/operations.
+
 Last updated: 2026-02-11
 
 ## Scope

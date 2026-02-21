@@ -1,5 +1,7 @@
 # AWS Gaming - Session Handoff
 
+> Historical note: This handoff document is preserved for context and may be stale. Use `docs/operations-architecture.md` for current architecture/operations.
+
 Last updated: 2026-02-11
 
 ## 1) Confirmed decisions
