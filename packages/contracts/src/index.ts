@@ -31,7 +31,7 @@ export interface LiveData {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Power Action / Boot & Shutdown Stages                              */
+/*  Transition / Boot & Shutdown Stages                                */
 /* ------------------------------------------------------------------ */
 
 export type BootStageId =
@@ -67,13 +67,16 @@ export interface PowerStage {
   timedOutMessage?: string;
 }
 
-export interface PowerAction {
+/** Persisted record tracking a user-initiated power transition.
+ *  Only stores intent + which side-effect actions have been fired.
+ *  Stage completion status is always computed from live AWS state. */
+export interface TransitionIntent {
   action: 'on' | 'off';
-  stages: PowerStage[];
-  currentStageId: PowerStageId;
+  /** Stage IDs whose action() side effects have been fired. */
+  firedActions: PowerStageId[];
   startedAt: string;
   deadlineAt: string;
-  /** Soft overall deadline marker. Visual cue only; action can still complete later. */
+  /** Soft overall deadline marker. Visual cue only. */
   deadlineExceededAt?: string;
 }
 
@@ -93,7 +96,10 @@ export interface ServerView {
   status: ServerStatus;
   liveData: LiveData | null;
   healthChecks: HealthCheck[];
-  powerAction: PowerAction | null;
+  /** Active user-initiated transition (null when no transition in progress). */
+  transition: TransitionIntent | null;
+  /** Always-computed stage checklist (empty when offline). */
+  stages: PowerStage[];
   lastUpdatedAt: string;
 }
 
@@ -136,10 +142,8 @@ export interface GameInstance {
   instanceCount: number;
   taskCount: number;
 
-  /* Runtime state (optional; computed from AWS + cache when absent) */
-  state?: ServerStatus;
-  powerAction?: PowerAction;
-  cachedStatus?: CachedServerStatus;
+  /* User's desired power state. Status is always computed from AWS. */
+  desiredState?: 'on' | 'off';
 }
 
 /* ------------------------------------------------------------------ */
@@ -230,11 +234,11 @@ export interface ServerPingResponse {
   statusCode?: number;
 }
 
-export interface PowerRequest {
+export interface TransitionRequest {
   action: 'on' | 'off';
 }
 
-export interface PowerResponse {
+export interface TransitionResponse {
   server: ServerView;
 }
 
@@ -341,7 +345,7 @@ export interface BootstrapCreateAdminResponse {
 export type EntityType =
   | 'GameTemplate'
   | 'GameInstance'
-  | 'PowerAction'
+  | 'TransitionIntent'
   | 'CachedStatus'
   | 'SecretAccessToken';
 
@@ -359,9 +363,9 @@ export const BOOT_STAGES: readonly { id: BootStageId; label: string }[] = [
   { id: 'scaling', label: 'Scaling EC2 Auto Scaling Group up' },
   { id: 'registering', label: 'Registering EC2 instance with ECS cluster' },
   { id: 'starting', label: 'Starting ECS service tasks' },
-  { id: 'task_healthy', label: 'Waiting for container health check' },
   { id: 'dns_update', label: 'Updating Route53 DNS record' },
   { id: 'dns_resolve', label: 'Waiting for DNS to resolve' },
+  { id: 'task_healthy', label: 'Waiting for container health check' },
   { id: 'game_ready', label: 'Waiting for game query response' },
   { id: 'ready', label: 'Server ready for players' },
 ] as const;

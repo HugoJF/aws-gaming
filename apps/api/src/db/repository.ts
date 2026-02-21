@@ -9,7 +9,7 @@ import {
 import type {
   GameTemplate,
   GameInstance,
-  PowerAction,
+  TransitionIntent,
   CachedServerStatus,
   SecretAccessToken,
 } from '@aws-gaming/contracts';
@@ -109,24 +109,24 @@ export class Repository {
   }
 
   /* ---------------------------------------------------------------- */
-  /*  PowerAction                                                      */
+  /*  TransitionIntent                                                  */
   /* ---------------------------------------------------------------- */
 
-  async getPowerAction(instanceId: string): Promise<PowerAction | null> {
+  async getTransition(instanceId: string): Promise<TransitionIntent | null> {
     const res = await this.doc.send(
       new GetCommand({
         TableName: this.tableName,
-        Key: { pk: `INSTANCE#${instanceId}`, sk: 'POWER_ACTION' },
+        Key: { pk: `INSTANCE#${instanceId}`, sk: 'TRANSITION' },
       }),
     );
-    return (res.Item as (PowerAction & { pk: string }) | undefined)
-      ? (res.Item as unknown as PowerAction)
+    return (res.Item as (TransitionIntent & { pk: string }) | undefined)
+      ? (res.Item as unknown as TransitionIntent)
       : null;
   }
 
-  async putPowerAction(
+  async putTransition(
     instanceId: string,
-    action: PowerAction,
+    intent: TransitionIntent,
   ): Promise<void> {
     const ttl = Math.floor(Date.now() / 1000) + POWER_ACTION_TTL_S;
     await this.doc.send(
@@ -134,20 +134,20 @@ export class Repository {
         TableName: this.tableName,
         Item: {
           pk: `INSTANCE#${instanceId}`,
-          sk: 'POWER_ACTION',
-          entityType: 'PowerAction',
+          sk: 'TRANSITION',
+          entityType: 'TransitionIntent',
           ttl,
-          ...action,
+          ...intent,
         },
       }),
     );
   }
 
-  async deletePowerAction(instanceId: string): Promise<void> {
+  async deleteTransition(instanceId: string): Promise<void> {
     await this.doc.send(
       new DeleteCommand({
         TableName: this.tableName,
-        Key: { pk: `INSTANCE#${instanceId}`, sk: 'POWER_ACTION' },
+        Key: { pk: `INSTANCE#${instanceId}`, sk: 'TRANSITION' },
       }),
     );
   }

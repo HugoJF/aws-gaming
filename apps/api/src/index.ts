@@ -7,8 +7,8 @@ import type {
   ServerStatusResponse,
   ServerCostResponse,
   ServerPingResponse,
-  PowerRequest,
-  PowerResponse,
+  TransitionRequest,
+  TransitionResponse,
   MeResponse,
   AdminListTokensResponse,
   AdminCreateTokenResponse,
@@ -17,7 +17,7 @@ import type {
   AdminListServersResponse,
   AdminListInstancesResponse,
   AdminTokenView,
-  PowerAction,
+  TransitionIntent,
   ServerView,
   SecretAccessToken,
   BootstrapStatusResponse,
@@ -273,15 +273,6 @@ api.get('/servers/:id/ping', async (c) => {
     return c.json({ error: 'Server not found' }, 404);
   }
 
-  // If the server is offline, avoid hitting AWS/Pricing/etc. Just return "not ok".
-  if (instance.state === 'offline') {
-    return c.json({
-      serverId: id,
-      ok: false,
-      latencyMs: null,
-    } satisfies ServerPingResponse);
-  }
-
   try {
     const view = await statusService.buildServerView(instance);
     if (!view.healthEndpoint) {
@@ -337,9 +328,9 @@ api.post('/servers/:id/power', async (c) => {
     return c.json({ error: 'Not authorized for this server' }, 403);
   }
 
-  let body: PowerRequest;
+  let body: TransitionRequest;
   try {
-    body = await c.req.json<PowerRequest>();
+    body = await c.req.json<TransitionRequest>();
   } catch {
     return c.json({ error: 'Invalid JSON body' }, 400);
   }
@@ -356,7 +347,7 @@ api.post('/servers/:id/power', async (c) => {
   try {
     current = await statusService.buildServerView(instance);
   } catch (error) {
-    console.error('Failed to build current server view before power action', {
+    console.error('Failed to build current server view before transition', {
       instanceId: id,
       action: body.action,
       error: error instanceof Error ? error.message : String(error),
@@ -364,50 +355,38 @@ api.post('/servers/:id/power', async (c) => {
     return c.json({ error: 'Unable to read current server status' }, 502);
   }
 
-  // Check for conflicting states
+  // Reject no-op transitions (already in the target state with nothing to do)
   if (body.action === 'on' && current.status === 'online') {
     return c.json({ error: 'Server is already online' }, 409);
   }
   if (body.action === 'off' && current.status === 'offline') {
     return c.json({ error: 'Server is already offline' }, 409);
   }
-  if (current.status === 'booting' || current.status === 'shutting-down') {
-    return c.json({ error: 'Power transition already in progress' }, 409);
-  }
 
-  let powerAction: PowerAction;
   try {
-    powerAction = await statusService.startPowerAction(instance, body.action);
+    await statusService.startTransition(instance, body.action);
   } catch (error) {
-    console.error('Failed to start power action', {
+    console.error('Failed to start transition', {
       instanceId: id,
       action: body.action,
       error: error instanceof Error ? error.message : String(error),
     });
-    return c.json({ error: 'Failed to start power action' }, 502);
+    return c.json({ error: 'Failed to start transition' }, 502);
   }
 
   let view: ServerView;
   try {
     view = await statusService.buildServerView(instance);
   } catch (error) {
-    console.error('Failed to build server view after power action start', {
+    console.error('Failed to build server view after transition start', {
       instanceId: id,
       action: body.action,
       error: error instanceof Error ? error.message : String(error),
     });
-    return c.json({ error: 'Power action started, but status refresh failed' }, 502);
+    return c.json({ error: 'Transition started, but status refresh failed' }, 502);
   }
-  const transitionalStatus = body.action === 'on' ? 'booting' : 'shutting-down';
 
-  return c.json({
-    server: {
-      ...view,
-      status: transitionalStatus,
-      powerAction,
-      lastUpdatedAt: new Date().toISOString(),
-    },
-  } satisfies PowerResponse);
+  return c.json({ server: view } satisfies TransitionResponse);
 });
 
 /* Admin API routes */

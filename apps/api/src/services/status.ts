@@ -4,37 +4,27 @@ import {
   Ec2Control,
   DnsControl,
 } from '@aws-gaming/aws-control';
-import { lookup } from 'node:dns/promises';
 import type {
   GameInstance,
   ServerView,
   ServerStatus,
   HealthCheck,
   LiveData,
-  PowerAction,
+  TransitionIntent,
   PowerStage,
-  BootStageId,
-  ShutdownStageId,
+  PowerStageId,
   CachedServerStatus,
 } from '@aws-gaming/contracts';
-import { BOOT_STAGES, SHUTDOWN_STAGES } from '@aws-gaming/contracts';
 import type { Repository } from '../db/repository.js';
 import { queryGameServer } from './gamedig.js';
+import {
+  BOOT_STAGES,
+  SHUTDOWN_STAGES,
+  type StageContext,
+} from './stages/index.js';
 
-const BOOT_DEADLINE_MS = 10 * 60 * 1000; // 10 minutes
-const STAGE_TIMEOUT_MS: Partial<Record<string, number>> = {
-  scaling: 180_000,
-  registering: 60_000,
-  starting: 60_000,
-  task_healthy: 120_000,
-  dns_update: 30_000,
-  dns_resolve: 30_000,
-  game_ready: 120_000,
-  stopping: 120_000,
-  dns_clear: 30_000,
-  scaling_down: 60_000,
-  draining: 180_000,
-};
+const TRANSITION_DEADLINE_MS = 10 * 60 * 1000;
+const STATUS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export class StatusService {
   constructor(
@@ -45,38 +35,115 @@ export class StatusService {
     private dns: DnsControl,
   ) {}
 
+  private applicableStages(instance: GameInstance, action: 'on' | 'off') {
+    const all = action === 'on' ? BOOT_STAGES : SHUTDOWN_STAGES;
+    return all.filter((s) => !s.appliesTo || s.appliesTo(instance));
+  }
+
+  private stageContext(instance: GameInstance): StageContext {
+    return {
+      instance,
+      asg: this.asg,
+      ecs: this.ecs,
+      ec2: this.ec2,
+      dns: this.dns,
+    };
+  }
+
   /** Build full ServerView for a single instance, using cache when fresh */
   async buildServerView(instance: GameInstance): Promise<ServerView> {
-    let powerAction = await this.repo.getPowerAction(instance.id);
+    let transition = await this.repo.getTransition(instance.id);
 
-    // Use cache when there is no active transition in progress.
-    if (!this.isTransitionActive(powerAction)) {
+    // Use cache when there is no active transition and cache is fresh (5 min).
+    if (!transition) {
       const cached = await this.repo.getCachedStatus(instance.id);
       if (cached) {
-        return this.toServerView(instance, cached, powerAction);
+        const ageMs = Date.now() - new Date(cached.fetchedAt).getTime();
+        if (ageMs < STATUS_CACHE_TTL_MS) {
+          const stages = await this.computeStages(instance, cached.status);
+          return this.toServerView(instance, cached, transition, stages);
+        }
       }
     }
 
-    // If a transition is in progress, advance first so we don't perform
-    // duplicate expensive probes (e.g. GameDig) in the same request.
-    if (this.isTransitionActive(powerAction)) {
-      await this.advancePowerAction(instance, powerAction);
-      powerAction = await this.repo.getPowerAction(instance.id);
+    // If a transition is active, advance it (fire unfired actions).
+    if (transition) {
+      transition = await this.advanceTransition(instance, transition);
     }
 
-    // Fetch fresh status once, based on the latest power action state.
-    const freshStatus = await this.fetchFreshStatus(instance, powerAction);
+    // Fetch fresh status
+    const freshStatus = await this.fetchFreshStatus(instance);
 
     // Cache the result
     await this.repo.putCachedStatus(freshStatus);
 
-    return this.toServerView(instance, freshStatus, powerAction);
+    // If all stages are done and transition is active, clean it up
+    if (transition && freshStatus.status !== 'booting' && freshStatus.status !== 'shutting-down') {
+      await this.repo.deleteTransition(instance.id);
+      transition = null;
+    }
+
+    // Compute stages from live checks
+    const stages = await this.computeStages(instance, freshStatus.status);
+
+    return this.toServerView(instance, freshStatus, transition, stages);
   }
+
+  /* ================================================================ */
+  /*  Stage Computation (always from live AWS state)                    */
+  /* ================================================================ */
+
+  private async computeStages(
+    instance: GameInstance,
+    status: ServerStatus,
+  ): Promise<PowerStage[]> {
+    if (status === 'offline' || status === 'online' || status === 'error') return [];
+
+    const action: 'on' | 'off' = status === 'booting' ? 'on' : 'off';
+    const stageDefs = this.applicableStages(instance, action);
+    const ctx = this.stageContext(instance);
+
+    // Evaluate stages sequentially: once a stage fails, the rest are pending.
+    const stages: PowerStage[] = [];
+    let reachedIncomplete = false;
+
+    for (const def of stageDefs) {
+      if (reachedIncomplete) {
+        stages.push({ id: def.id, label: def.label, status: 'pending' });
+        continue;
+      }
+
+      let met = false;
+      let error: string | undefined;
+      try {
+        met = await def.check(ctx);
+      } catch (e) {
+        error = e instanceof Error ? e.message : String(e);
+      }
+
+      if (met) {
+        stages.push({ id: def.id, label: def.label, status: 'completed' });
+      } else {
+        reachedIncomplete = true;
+        stages.push({
+          id: def.id,
+          label: def.label,
+          status: 'in_progress',
+          ...(error ? { error } : {}),
+        });
+      }
+    }
+
+    return stages;
+  }
+
+  /* ================================================================ */
+  /*  Status Computation                                               */
+  /* ================================================================ */
 
   /** Fetch live status from AWS APIs + GameDig */
   private async fetchFreshStatus(
     instance: GameInstance,
-    powerAction: PowerAction | null = null,
   ): Promise<CachedServerStatus> {
     const [asgStatus, ecsStatus] = await Promise.all([
       this.asg.describe(instance.autoScalingGroupName).catch(() => null),
@@ -85,25 +152,27 @@ export class StatusService {
         .catch(() => null),
     ]);
 
-    // Determine current status from AWS state
-    let observedStatus: ServerStatus = instance.state ?? 'offline';
-    if (asgStatus && ecsStatus) {
-      if (ecsStatus.runningCount > 0) {
-        observedStatus = 'online';
-      } else if (asgStatus.desiredCapacity === 0) {
-        observedStatus = 'offline';
-      }
+    const desiredState = instance.desiredState;
+
+    // If desiredState was never set, we can't determine intent — show error.
+    // The user can fix this by toggling power (which sets desiredState).
+    let status: ServerStatus;
+    if (!desiredState) {
+      status = 'error';
+    } else if (desiredState === 'on') {
+      const allBootDone = await this.allStagesMet(instance, 'on');
+      status = allBootDone ? 'online' : 'booting';
+    } else {
+      const allShutdownDone = await this.allStagesMet(instance, 'off');
+      status = allShutdownDone ? 'offline' : 'shutting-down';
     }
 
     const publicIp = await this.resolvePublicIp(asgStatus);
     const queryHost = instance.dnsName ?? publicIp;
-    // GameDig query (skip if ECS has no running tasks)
     let liveData: LiveData | null = null;
     if (
-      observedStatus === 'online' &&
+      status === 'online' &&
       instance.gameType !== 'generic' &&
-      ecsStatus &&
-      ecsStatus.runningCount > 0 &&
       queryHost
     ) {
       liveData = await queryGameServer({
@@ -111,17 +180,6 @@ export class StatusService {
         host: queryHost,
         port: instance.queryPort ?? instance.hostPort,
       });
-    }
-
-    // Display status: power actions are UX hints and should not override
-    // an actually-online server. Timeouts/errors are visual cues only.
-    let status: ServerStatus = observedStatus;
-    if (powerAction) {
-      if (powerAction.action === 'on') {
-        status = observedStatus === 'online' ? 'online' : 'booting';
-      } else {
-        status = observedStatus === 'offline' ? 'offline' : 'shutting-down';
-      }
     }
 
     // Build health checks
@@ -143,6 +201,18 @@ export class StatusService {
       fetchedAt: new Date().toISOString(),
       ttl: Math.floor(Date.now() / 1000) + 3600,
     };
+  }
+
+  private async allStagesMet(
+    instance: GameInstance,
+    action: 'on' | 'off',
+  ): Promise<boolean> {
+    const ctx = this.stageContext(instance);
+    const stageDefs = this.applicableStages(instance, action);
+    const results = await Promise.all(
+      stageDefs.map((s) => s.check(ctx).catch(() => false)),
+    );
+    return results.every(Boolean);
   }
 
   private async resolvePublicIp(
@@ -331,7 +401,8 @@ export class StatusService {
   private toServerView(
     instance: GameInstance,
     status: CachedServerStatus,
-    powerAction?: PowerAction | null,
+    transition: TransitionIntent | null,
+    stages: PowerStage[],
   ): ServerView {
     const host = instance.dnsName ?? status.publicIp ?? instance.id;
     const address = `${host}:${instance.hostPort}`;
@@ -354,350 +425,119 @@ export class StatusService {
       status: status.status,
       liveData: status.liveData,
       healthChecks: status.healthChecks,
-      powerAction: powerAction ?? null,
+      transition,
+      stages,
       lastUpdatedAt: status.fetchedAt,
     };
   }
 
   /* ================================================================ */
-  /*  Power State Machine                                              */
+  /*  Transition                                                       */
   /* ================================================================ */
 
-  async startPowerAction(
+  async startTransition(
     instance: GameInstance,
     action: 'on' | 'off',
-  ): Promise<PowerAction> {
-    const stageDefs = action === 'on' ? BOOT_STAGES : SHUTDOWN_STAGES;
+  ): Promise<TransitionIntent> {
     const now = new Date();
+    const ctx = this.stageContext(instance);
+    const stageDefs = this.applicableStages(instance, action);
 
-    const stages: PowerStage[] = stageDefs.map((def, i) => ({
-      id: def.id,
-      label: def.label,
-      status: i === 0 ? 'in_progress' : 'pending',
-      ...(i === 0 ? { startedAt: now.toISOString() } : {}),
-    }));
-
-    const powerAction: PowerAction = {
+    const transition: TransitionIntent = {
       action,
-      stages,
-      currentStageId: stages[0].id,
+      firedActions: [],
       startedAt: now.toISOString(),
-      deadlineAt: new Date(now.getTime() + BOOT_DEADLINE_MS).toISOString(),
+      deadlineAt: new Date(now.getTime() + TRANSITION_DEADLINE_MS).toISOString(),
     };
 
-    // Fire the first AWS action
-    if (action === 'on') {
-      await this.asg.scaleUp(
-        instance.autoScalingGroupName,
-        instance.instanceCount,
-      );
-    } else {
-      await this.ecs.setDesiredCount(
-        instance.ecsClusterArn,
-        instance.ecsServiceName,
-        0,
-      );
-    }
+    // Fire the first stage's action
+    const firstStage = stageDefs[0];
+    await firstStage.action(ctx);
+    transition.firedActions.push(firstStage.id);
 
-    // Persist
-    await this.repo.putPowerAction(instance.id, powerAction);
+    // Persist desired state and transition
+    instance.desiredState = action === 'on' ? 'on' : 'off';
+    await Promise.all([
+      this.repo.putInstance(instance),
+      this.repo.putTransition(instance.id, transition),
+    ]);
 
-    return powerAction;
+    return transition;
   }
 
-  /** Advance the state machine, called on each status poll */
-  async advancePowerAction(
+  /** Advance the transition by firing unfired stage actions when
+   *  their preceding stage's check passes. */
+  private async advanceTransition(
     instance: GameInstance,
-    action: PowerAction,
-  ): Promise<void> {
+    transition: TransitionIntent,
+  ): Promise<TransitionIntent> {
     const now = new Date();
+    const ctx = this.stageContext(instance);
+    const stageDefs = this.applicableStages(instance, transition.action);
 
-    // Check overall deadline
-    if (now.getTime() > new Date(action.deadlineAt).getTime()) {
-      // Soft deadline: keep going, but mark for UI.
-      if (!action.deadlineExceededAt) {
-        action.deadlineExceededAt = now.toISOString();
-        await this.repo.putPowerAction(instance.id, action);
-      }
+    // Check overall deadline (soft — just mark it)
+    if (
+      now.getTime() > new Date(transition.deadlineAt).getTime() &&
+      !transition.deadlineExceededAt
+    ) {
+      transition.deadlineExceededAt = now.toISOString();
+      await this.repo.putTransition(instance.id, transition);
     }
 
-    const currentStage = action.stages.find(
-      (s) => s.id === action.currentStageId,
-    );
-    if (!currentStage) return;
+    // Walk through stages: for each stage whose action hasn't been fired,
+    // check if the previous stage's condition is met. If so, fire the action.
+    let updated = false;
+    for (let i = 0; i < stageDefs.length; i++) {
+      const stage = stageDefs[i];
+      if (transition.firedActions.includes(stage.id)) continue;
 
-    // Soft timeouts mean we should not permanently fail stages.
-    // If a stage previously failed (legacy data), treat it as in-progress.
-    if (currentStage.status === 'failed') {
-      currentStage.status = 'in_progress';
-      delete currentStage.completedAt;
-      delete currentStage.error;
-      await this.repo.putPowerAction(instance.id, action);
-    }
-
-    if (currentStage.status !== 'in_progress') return;
-
-    // Check if current stage condition is met.
-    // We do this before timeout checks to avoid false failures when polling is delayed.
-    let conditionMet = false;
-    try {
-      conditionMet = await this.checkStageCondition(
-        instance,
-        action,
-        currentStage.id,
-      );
-    } catch (error) {
-      // Soft error: record it, but keep checking on subsequent polls.
-      currentStage.error = `Stage check failed: ${this.toErrorMessage(error)}`;
-      await this.repo.putPowerAction(instance.id, action);
-    }
-
-    if (conditionMet) {
-      await this.completeStageAndAdvance(instance, action);
-      return;
-    }
-
-    // Check individual stage timeout
-    if (currentStage.startedAt) {
-      const stageAge = now.getTime() - new Date(currentStage.startedAt).getTime();
-      const maxAge = STAGE_TIMEOUT_MS[currentStage.id] ?? 120_000;
-      if (stageAge > maxAge) {
-        // Soft timeout: mark it once for UI, but keep checking for recovery.
-        if (!currentStage.timedOutAt) {
-          currentStage.timedOutAt = now.toISOString();
-          currentStage.timedOutMessage = `Timed out after ${Math.round(stageAge / 1000)}s`;
-          await this.repo.putPowerAction(instance.id, action);
-        }
-      }
-    }
-
-  }
-
-  private async checkStageCondition(
-    instance: GameInstance,
-    action: PowerAction,
-    stageId: string,
-  ): Promise<boolean> {
-    if (action.action === 'on') {
-      return this.checkBootStageCondition(instance, stageId as BootStageId);
-    }
-    return this.checkShutdownStageCondition(instance, stageId as ShutdownStageId);
-  }
-
-  private async checkBootStageCondition(
-    instance: GameInstance,
-    stageId: BootStageId,
-  ): Promise<boolean> {
-    switch (stageId) {
-      case 'scaling': {
-        const asgStatus = await this.asg.describe(instance.autoScalingGroupName);
-        return this.asg.allInService(asgStatus);
-      }
-      case 'registering': {
-        const ecsStatus = await this.ecs.describe(
-          instance.ecsClusterArn,
-          instance.ecsServiceName,
-        );
-        return ecsStatus.containerInstanceCount > 0;
-      }
-      case 'starting': {
-        // Fire the ECS update on first check
-        await this.ecs.setDesiredCount(
-          instance.ecsClusterArn,
-          instance.ecsServiceName,
-          instance.taskCount,
-        );
-        const ecsStatus = await this.ecs.describe(
-          instance.ecsClusterArn,
-          instance.ecsServiceName,
-        );
-        return this.ecs.isRunning(ecsStatus);
-      }
-      case 'task_healthy': {
-        const ecsStatus = await this.ecs.describe(
-          instance.ecsClusterArn,
-          instance.ecsServiceName,
-        );
-        return (
-          ecsStatus.desiredCount > 0 &&
-          ecsStatus.healthyTaskCount >= ecsStatus.desiredCount
-        );
-      }
-      case 'dns_update': {
-        if (!instance.dnsName || !instance.route53ZoneId) return true;
-        const asgStatus = await this.asg.describe(instance.autoScalingGroupName);
-        const instanceIds = asgStatus.instances.map((i) => i.instanceId);
-        const publicIp = await this.ec2.getPublicIp(instanceIds);
-        if (!publicIp) return false;
-        await this.dns.upsertARecord(
-          instance.route53ZoneId,
-          instance.dnsName,
-          publicIp,
-        );
-        return this.dns.verifyRecord(
-          instance.route53ZoneId,
-          instance.dnsName,
-          publicIp,
-        );
-      }
-      case 'dns_resolve': {
-        if (!instance.dnsName) return true;
-
-        // If we can determine the expected public IP, wait until DNS resolves to it.
-        // This keeps "DNS ready" separate from the game query probe.
-        const expectedIp =
-          (await this.resolvePublicIp(
-            await this.asg.describe(instance.autoScalingGroupName),
-          )) ?? null;
-
+      // Check if the previous stage's condition is met
+      if (i > 0) {
+        const prevStage = stageDefs[i - 1];
+        let prevMet = false;
         try {
-          const resolved = await lookup(instance.dnsName, { family: 4 });
-          if (!resolved.address) return false;
-          return expectedIp ? resolved.address === expectedIp : true;
+          prevMet = await prevStage.check(ctx);
         } catch {
-          return false;
+          // Previous stage check failed — don't advance yet
+          break;
         }
+        if (!prevMet) break;
       }
-      case 'game_ready': {
-        if (instance.gameType === 'generic') return true;
 
-        // Query readiness should reflect what players will use. If DNS is configured,
-        // we query via the DNS name (dns_resolve stage should ensure it propagates).
-        const host =
-          instance.dnsName ??
-          (await this.resolvePublicIp(
-            await this.asg.describe(instance.autoScalingGroupName),
-          ));
-        if (!host) return true;
-
-        const liveData = await queryGameServer({
-          gameType: instance.gameType,
-          host,
-          port: instance.queryPort ?? instance.hostPort,
-        });
-        return liveData !== null;
+      // Fire this stage's action
+      try {
+        await stage.action(ctx);
+        transition.firedActions.push(stage.id);
+        updated = true;
+      } catch {
+        // Action failed — stop advancing, will retry next poll
+        break;
       }
-      case 'ready':
-        return true;
-    }
-  }
-
-  private async checkShutdownStageCondition(
-    instance: GameInstance,
-    stageId: ShutdownStageId,
-  ): Promise<boolean> {
-    switch (stageId) {
-      case 'stopping': {
-        const ecsStatus = await this.ecs.describe(
-          instance.ecsClusterArn,
-          instance.ecsServiceName,
-        );
-        return this.ecs.isStopped(ecsStatus);
-      }
-      case 'dns_clear': {
-        if (!instance.dnsName || !instance.route53ZoneId) return true;
-        await this.dns.deleteARecord(instance.route53ZoneId, instance.dnsName);
-        return this.dns.verifyRecordDeleted(
-          instance.route53ZoneId,
-          instance.dnsName,
-        );
-      }
-      case 'scaling_down': {
-        await this.asg.scaleDown(instance.autoScalingGroupName);
-        const asgStatus = await this.asg.describe(instance.autoScalingGroupName);
-        return asgStatus.desiredCapacity === 0 && asgStatus.minSize === 0;
-      }
-      case 'draining': {
-        const [ecsStatus, asgStatus] = await Promise.all([
-          this.ecs.describe(
-            instance.ecsClusterArn,
-            instance.ecsServiceName,
-          ),
-          this.asg.describe(instance.autoScalingGroupName),
-        ]);
-        return ecsStatus.containerInstanceCount === 0 && this.asg.isEmpty(asgStatus);
-      }
-      case 'stopped':
-        return true;
-    }
-  }
-
-  private hasFailedStage(action: PowerAction): boolean {
-    return action.stages.some((stage) => stage.status === 'failed');
-  }
-
-  private isTransitionActive(action: PowerAction | null): action is PowerAction {
-    if (!action) return false;
-    const current = action.stages.find((stage) => stage.id === action.currentStageId);
-    return current?.status === 'in_progress';
-  }
-
-  private async completeStageAndAdvance(
-    instance: GameInstance,
-    action: PowerAction,
-  ): Promise<void> {
-    const now = new Date().toISOString();
-    const currentIndex = action.stages.findIndex(
-      (s) => s.id === action.currentStageId,
-    );
-
-    // Mark current stage completed
-    action.stages[currentIndex] = {
-      ...action.stages[currentIndex],
-      status: 'completed',
-      completedAt: now,
-      // Clear transient UI markers.
-      error: undefined,
-      timedOutAt: undefined,
-      timedOutMessage: undefined,
-    };
-
-    const nextIndex = currentIndex + 1;
-
-    if (nextIndex >= action.stages.length) {
-      // All stages done — finalize
-      await this.repo.deletePowerAction(instance.id);
-      return;
     }
 
-    // Start next stage
-    action.stages[nextIndex] = {
-      ...action.stages[nextIndex],
-      status: 'in_progress',
-      startedAt: now,
-    };
-    action.currentStageId = action.stages[nextIndex].id;
-
-    await this.repo.putPowerAction(instance.id, action);
-  }
-
-  private async failCurrentStage(
-    instance: GameInstance,
-    action: PowerAction,
-    error: string,
-  ): Promise<void> {
-    const currentIndex = action.stages.findIndex(
-      (s) => s.id === action.currentStageId,
-    );
-
-    action.stages[currentIndex] = {
-      ...action.stages[currentIndex],
-      status: 'failed',
-      completedAt: new Date().toISOString(),
-      error,
-    };
-
-    await this.repo.putPowerAction(instance.id, action);
-  }
-
-  private toErrorMessage(error: unknown): string {
-    if (error instanceof Error) return error.message;
-    if (typeof error === 'string') return error;
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return 'unknown error';
+    // Check if all stages are complete
+    let allComplete = true;
+    for (const stage of stageDefs) {
+      try {
+        if (!(await stage.check(ctx))) {
+          allComplete = false;
+          break;
+        }
+      } catch {
+        allComplete = false;
+        break;
+      }
     }
-  }
 
+    if (allComplete) {
+      await this.repo.deleteTransition(instance.id);
+      return transition;
+    }
+
+    if (updated) {
+      await this.repo.putTransition(instance.id, transition);
+    }
+
+    return transition;
+  }
 }
