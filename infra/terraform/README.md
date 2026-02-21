@@ -131,6 +131,8 @@ Key API variables in `stack/variables.tf`:
 - `api_environment_variables` (additional Lambda env vars)
 - `api_enable_attack_detection_alarms` + alarm thresholds/action ARNs
 
+For DynamoDB ownership/model and day-2 management details, see `docs/dynamodb.md`.
+
 ## Security and abuse controls
 
 - API Lambda IAM write actions are scoped to stack-managed ECS services and ASGs.

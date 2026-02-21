@@ -19,6 +19,7 @@ Game server control plane monorepo:
 | [`packages/aws-control/`](packages/aws-control/README.md) | ASG, ECS, EC2, and Route53 wrappers |
 | [`infra/`](infra/README.md) | Infrastructure root |
 | [`infra/terraform/`](infra/terraform/README.md) | Terraform modules |
+| [`docs/dynamodb.md`](docs/dynamodb.md) | DynamoDB setup and operational ownership |
 
 ## Prerequisites
 
