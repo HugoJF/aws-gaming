@@ -18,7 +18,7 @@ export function useAdminTokensQuery({ token }: UseAdminTokensQueryOptions) {
     queryFn: async () => {
       if (!token) return [];
       const res = await api.adminListTokens(token);
-      return res.tokens;
+      return res.data.tokens;
     },
   });
 

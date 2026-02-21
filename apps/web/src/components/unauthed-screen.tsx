@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ArrowRight, KeyRound } from 'lucide-react';
+import { parseTokenInput } from '@/lib/token-input';
 
 interface UnauthedScreenProps {
   onTokenSubmit: (token: string) => void;
@@ -13,14 +14,14 @@ export function UnauthedScreen({
   onDismissAuthError,
 }: UnauthedScreenProps) {
   const [input, setInput] = useState('');
+  const parsedInput = parseTokenInput(input);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = input.trim();
-    if (trimmed.length === 0) return;
-    const match = trimmed.match(/\/t\/(.+)$/);
+    if (!parsedInput) return;
+
     onDismissAuthError?.();
-    onTokenSubmit(match ? match[1] : trimmed);
+    onTokenSubmit(parsedInput);
   };
 
   return (
@@ -58,7 +59,7 @@ export function UnauthedScreen({
           />
           <button
             type="submit"
-            disabled={input.trim().length === 0}
+            disabled={parsedInput === null}
             className="flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Continue

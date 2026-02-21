@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { useAdminTokensQuery } from '@/hooks/use-admin-tokens-query';
 import { useTokenMutations } from '@/hooks/use-token-mutations';
 import { useAdminServersQuery } from '@/hooks/use-admin-servers-query';
-import { ApiError } from '@/lib/api';
+import { getHttpErrorMessage } from '@/lib/api';
 import { TokenList } from './token-list';
 import { InstanceList } from './instance-list';
 
@@ -40,9 +40,7 @@ export function AdminView({ token }: AdminViewProps) {
   const loading = tokensLoading || serversLoading;
   const errorSource = tokensError ?? serversError ?? mutationsError;
   const error = errorSource
-    ? errorSource instanceof ApiError
-      ? errorSource.body.error
-      : errorSource.message
+    ? getHttpErrorMessage(errorSource, 'Failed to load admin data')
     : null;
 
   return (

@@ -18,7 +18,7 @@ export function useAdminServersQuery({ token }: UseAdminServersQueryOptions) {
     queryFn: async () => {
       if (!token) return [];
       const res = await api.adminListServers(token);
-      return res.servers;
+      return res.data.servers;
     },
   });
 

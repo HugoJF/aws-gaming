@@ -12,7 +12,7 @@ export function usePowerMutation(token: string | null) {
       api.transition(vars.token, vars.serverId, vars.action),
     onSuccess: (res, { serverId }) => {
       const replaceServerOptimistically = (prev: ServerView[] | undefined) =>
-        prev?.map((s) => (s.id === serverId ? res.server : s)) ?? prev;
+        prev?.map((s) => (s.id === serverId ? res.data.server : s)) ?? prev;
 
       qc.setQueryData<ServerView[]>(serversQueryKey(token), replaceServerOptimistically);
       void qc.invalidateQueries({ queryKey: serversQueryKey(token) });

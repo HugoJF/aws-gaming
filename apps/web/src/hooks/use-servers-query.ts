@@ -32,7 +32,7 @@ export function useServersQuery(token: string | null) {
     refetchOnWindowFocus: false,
     refetchInterval: (q) =>
       getRefetchInterval(q.state.data as ServerView[] | undefined),
-    queryFn: () => api.listServers(token!).then((res) => res.servers),
+    queryFn: () => api.listServers(token!).then((res) => res.data.servers),
   });
 
   return {

@@ -9,7 +9,7 @@ import { UnauthedScreen } from '@/components/unauthed-screen';
 import { BootstrapScreen } from '@/components/bootstrap-screen';
 import { ServerCard } from '@/components/server-card';
 import { AdminView } from '@/components/admin/admin-view';
-import { ApiError } from '@/lib/api';
+import { getHttpErrorMessage, getHttpStatus } from '@/lib/api';
 import { Loader2 } from 'lucide-react';
 
 const BOOTSTRAP_DONE_KEY = 'serverdeck_bootstrap_not_needed';
@@ -50,20 +50,20 @@ export function App() {
   const { togglePower, pendingServerId, error: mutationError } = usePowerMutation(token);
 
   const errorSource = queryError ?? mutationError;
-  const isAuthError =
-    errorSource instanceof ApiError &&
-    (errorSource.status === 401 || errorSource.status === 403);
+  const errorStatus = getHttpStatus(errorSource);
+  const isAuthError = errorStatus === 401 || errorStatus === 403;
 
   useEffect(() => {
-    if (isAuthError) handleAuthError((errorSource as ApiError).body.error);
+    if (isAuthError) {
+      handleAuthError(
+        getHttpErrorMessage(errorSource, 'Session expired. Please enter your access token again.'),
+      );
+    }
   }, [isAuthError, errorSource, handleAuthError]);
 
-  const error =
-    errorSource && !isAuthError
-      ? errorSource instanceof ApiError
-        ? errorSource.body.error
-        : errorSource.message
-      : null;
+  const error = errorSource && !isAuthError
+    ? getHttpErrorMessage(errorSource, 'Failed to load servers')
+    : null;
 
   if (!isAuthenticated) {
     if (showBootstrap) {

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import axios from 'axios';
 
 /** Ping intervals by server status (ms) */
 const PING_INTERVALS: Record<string, number> = {
@@ -67,12 +68,15 @@ export function useLatencyPing({ healthEndpoint, status }: UseLatencyPingOptions
       const timeout = window.setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
 
       try {
-        await fetch(url, {
-          method: 'GET',
-          // Latency probe only; avoid requiring CORS headers on sidecar.
-          mode: 'no-cors',
-          cache: 'no-store',
+        await axios.get(url, {
+          adapter: 'fetch',
           signal: controller.signal,
+          // Latency probe only; avoid requiring CORS headers on sidecar.
+          fetchOptions: {
+            mode: 'no-cors',
+            cache: 'no-store',
+          },
+          validateStatus: () => true,
         });
         const ms = Math.round(performance.now() - start);
         if (mountedRef.current) setLatency(ms);
@@ -99,4 +103,3 @@ export function useLatencyPing({ healthEndpoint, status }: UseLatencyPingOptions
 
   return { latency, pinging };
 }
-

@@ -1,3 +1,5 @@
+import axios from 'axios';
+import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import type {
   ListServersResponse,
   ServerStatusResponse,
@@ -21,60 +23,78 @@ import type {
 
 const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
 
-class ApiError extends Error {
-  constructor(
-    public status: number,
-    public body: ErrorResponse,
-  ) {
-    super(body.error);
-    this.name = 'ApiError';
-  }
+const http = axios.create({
+  baseURL: API_BASE,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+function withAuth(
+  token: string,
+  config: AxiosRequestConfig,
+): AxiosRequestConfig {
+  return {
+    ...config,
+    headers: {
+      ...config.headers,
+      Authorization: `Bearer ${token}`,
+    },
+  };
 }
 
-async function request<T>(
+function request<T>(
   path: string,
   token: string,
-  options?: RequestInit,
-): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...options?.headers,
-    },
-  });
-
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({
-      error: `HTTP ${res.status}`,
-    }))) as ErrorResponse;
-    throw new ApiError(res.status, body);
-  }
-
-  return res.json() as Promise<T>;
+  options?: AxiosRequestConfig,
+): Promise<AxiosResponse<T>> {
+  return http.request<T>(withAuth(token, { url: path, ...options }));
 }
 
-async function requestPublic<T>(
+function requestPublic<T>(
   path: string,
-  options?: RequestInit,
-): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-  });
+  options?: AxiosRequestConfig,
+): Promise<AxiosResponse<T>> {
+  return http.request<T>({ url: path, ...options });
+}
 
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({
-      error: `HTTP ${res.status}`,
-    }))) as ErrorResponse;
-    throw new ApiError(res.status, body);
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function readErrorResponse(error: unknown): ErrorResponse | null {
+  if (!axios.isAxiosError(error)) return null;
+
+  const data = error.response?.data;
+  if (!isRecord(data)) return null;
+  if (typeof data.error !== 'string') return null;
+
+  const body: ErrorResponse = { error: data.error };
+  if (typeof data.detail === 'string') {
+    body.detail = data.detail;
   }
 
-  return res.json() as Promise<T>;
+  return body;
+}
+
+export function getHttpStatus(error: unknown): number | null {
+  if (!axios.isAxiosError(error)) return null;
+  return error.response?.status ?? null;
+}
+
+export function getHttpErrorMessage(
+  error: unknown,
+  fallback: string = 'Request failed',
+): string {
+  const body = readErrorResponse(error);
+  if (body?.detail) return `${body.error}: ${body.detail}`;
+  if (body?.error) return body.error;
+
+  if (isRecord(error) && typeof error.message === 'string' && error.message.length > 0) {
+    return error.message;
+  }
+
+  return fallback;
 }
 
 export const api = {
@@ -100,7 +120,7 @@ export const api = {
   transition(token: string, serverId: string, action: 'on' | 'off') {
     return request<TransitionResponse>(`/api/servers/${serverId}/power`, token, {
       method: 'POST',
-      body: JSON.stringify({ action }),
+      data: { action },
     });
   },
 
@@ -115,14 +135,14 @@ export const api = {
   adminCreateToken(token: string, input: AdminCreateTokenRequest) {
     return request<AdminCreateTokenResponse>('/api/admin/tokens', token, {
       method: 'POST',
-      body: JSON.stringify(input),
+      data: input,
     });
   },
 
   adminUpdateToken(token: string, id: string, input: AdminUpdateTokenRequest) {
     return request<AdminUpdateTokenResponse>(`/api/admin/tokens/${id}`, token, {
       method: 'PATCH',
-      body: JSON.stringify(input),
+      data: input,
     });
   },
 
@@ -146,11 +166,10 @@ export const api = {
   },
 
   bootstrapCreateAdmin(input?: BootstrapCreateAdminRequest) {
-    return requestPublic<BootstrapCreateAdminResponse>('/api/bootstrap/admin', {
+    return requestPublic<BootstrapCreateAdminResponse | ErrorResponse>('/api/bootstrap/admin', {
       method: 'POST',
-      body: JSON.stringify(input ?? {}),
+      data: input ?? {},
+      validateStatus: (status) => status === 409 || (status >= 200 && status < 300),
     });
   },
 };
-
-export { ApiError };

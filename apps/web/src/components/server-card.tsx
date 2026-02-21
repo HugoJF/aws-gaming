@@ -43,7 +43,7 @@ import type {
   ServerHourlyCostEstimate,
 } from '@aws-gaming/contracts';
 import { useServerCostQuery } from '@/hooks/use-server-cost-query';
-import { ApiError } from '@/lib/api';
+import { getHttpErrorMessage } from '@/lib/api';
 
 export type { ServerView };
 
@@ -319,14 +319,7 @@ function CostChip({
 }
 
 function CostErrorChip({ error }: { error: unknown }) {
-  const message =
-    error instanceof ApiError
-      ? error.body.detail
-        ? `${error.body.error}: ${error.body.detail}`
-        : error.body.error
-      : error instanceof Error
-        ? error.message
-        : String(error);
+  const message = getHttpErrorMessage(error, 'Failed to load cost estimate');
 
   return (
     <HoverCard openDelay={150} closeDelay={100}>

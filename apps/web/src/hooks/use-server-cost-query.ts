@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import type { ServerHourlyCostEstimate } from '@aws-gaming/contracts';
 import { api } from '@/lib/api';
 
 export function serverCostQueryKey(
@@ -19,7 +18,7 @@ export function useServerCostQuery(token: string | null, serverId: string) {
     queryFn: async () => {
       if (!token) throw new Error('Missing auth token');
       const res = await api.getServerCost(token, serverId);
-      return res.estimate as ServerHourlyCostEstimate;
+      return res.data.estimate;
     },
   });
 
@@ -29,4 +28,3 @@ export function useServerCostQuery(token: string | null, serverId: string) {
     error: query.error,
   };
 }
-

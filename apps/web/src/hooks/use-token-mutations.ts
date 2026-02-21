@@ -37,9 +37,9 @@ export function useTokenMutations({ token }: UseTokenMutationsOptions) {
     },
     onSuccess: (result) => {
       setLastCreated({
-        token: result.token,
-        rawToken: result.rawToken,
-        shareUrl: tokenShareUrl(result.rawToken),
+        token: result.data.token,
+        rawToken: result.data.rawToken,
+        shareUrl: tokenShareUrl(result.data.rawToken),
       });
       void qc.invalidateQueries({ queryKey: adminTokensQueryKey(token) });
     },
