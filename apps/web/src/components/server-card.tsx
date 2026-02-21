@@ -1,11 +1,21 @@
 import React from 'react';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { BootSequence } from '@/components/boot-sequence';
 import { PowerToggle } from '@/components/power-toggle';
 import { useRelativeTime } from '@/hooks/use-relative-time';
 import { useLatencyPing } from '@/hooks/use-latency-ping';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
 import {
   HoverCard,
   HoverCardTrigger,
@@ -69,7 +79,11 @@ export function ServerCard({ token, server, onTogglePower, powerPending }: Serve
   const isOnline = server.status === 'online';
   const isBooting = server.status === 'booting';
   const isShuttingDown = server.status === 'shutting-down';
-  const isProcessing = isBooting || isShuttingDown || !!powerPending;
+  const isError = server.status === 'error';
+  const isTransitioning = isBooting || isShuttingDown;
+  const isProcessing = isTransitioning || !!powerPending;
+
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const gameConfig = GAME_CONFIG[server.game];
 
@@ -78,15 +92,25 @@ export function ServerCard({ token, server, onTogglePower, powerPending }: Serve
     status: server.status,
   });
 
+  const targetAction: 'on' | 'off' = server.status === 'offline' ? 'on' : 'off';
+
   const handleToggle = useCallback(() => {
-    if (isProcessing) return;
-    onTogglePower(server.id, isOnline ? 'off' : 'on');
-  }, [isProcessing, isOnline, server.id, onTogglePower]);
+    if (powerPending) return;
+    if (isTransitioning) {
+      setConfirmOpen(true);
+      return;
+    }
+    onTogglePower(server.id, targetAction);
+  }, [powerPending, isTransitioning, targetAction, server.id, onTogglePower]);
+
+  const handleConfirm = useCallback(() => {
+    setConfirmOpen(false);
+    onTogglePower(server.id, targetAction);
+  }, [targetAction, server.id, onTogglePower]);
 
   const overallHealth = getOverallHealth(server.healthChecks);
 
-  const powerAction = server.powerAction;
-  const stages = powerAction?.stages ?? [];
+  const stages = server.stages ?? [];
 
   const {
     estimate: costEstimate,
@@ -137,7 +161,8 @@ export function ServerCard({ token, server, onTogglePower, powerPending }: Serve
               isOn={isOnline}
               isProcessing={isProcessing}
               isBooting={isBooting || (!!powerPending && !isOnline)}
-              isShuttingDown={isShuttingDown || (!!powerPending && isOnline)}
+              isShuttingDown={isShuttingDown || isError || (!!powerPending && isOnline)}
+              disabled={!!powerPending}
               onToggle={handleToggle}
               label={`Toggle server ${server.displayName}`}
             />
@@ -179,14 +204,40 @@ export function ServerCard({ token, server, onTogglePower, powerPending }: Serve
           )}
         </div>
 
-        {/* Boot / Shutdown sequence (API-driven stages) */}
-        {powerAction && stages.length > 0 && (
+        {/* Boot / Shutdown sequence (always computed from AWS state) */}
+        {stages.length > 0 && (
           <BootSequence
-            type={powerAction.action === 'on' ? 'boot' : 'shutdown'}
+            type={isShuttingDown ? 'shutdown' : 'boot'}
             stages={stages}
           />
         )}
       </div>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {isBooting ? 'Server is already booting' : 'Server is already shutting down'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {isBooting
+                ? 'This server is currently booting up. Do you want to force a shutdown instead?'
+                : 'This server is currently shutting down. Do you want to force the shutdown sequence to run again?'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirm}
+              className={cn(
+                isShuttingDown && 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+              )}
+            >
+              {isBooting ? 'Force shutdown' : 'Retry shutdown'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

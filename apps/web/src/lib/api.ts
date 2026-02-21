@@ -3,7 +3,7 @@ import type {
   ServerStatusResponse,
   ServerCostResponse,
   ServerPingResponse,
-  PowerResponse,
+  TransitionResponse,
   ErrorResponse,
   MeResponse,
   AdminListTokensResponse,
@@ -97,8 +97,8 @@ export const api = {
     return request<ServerPingResponse>(`/api/servers/${serverId}/ping`, token);
   },
 
-  powerAction(token: string, serverId: string, action: 'on' | 'off') {
-    return request<PowerResponse>(`/api/servers/${serverId}/power`, token, {
+  transition(token: string, serverId: string, action: 'on' | 'off') {
+    return request<TransitionResponse>(`/api/servers/${serverId}/power`, token, {
       method: 'POST',
       body: JSON.stringify({ action }),
     });

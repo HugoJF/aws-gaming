@@ -7,6 +7,7 @@ interface PowerToggleProps {
   isBooting: boolean;
   isShuttingDown: boolean;
   onToggle: () => void;
+  disabled?: boolean;
   label: string;
 }
 
@@ -16,19 +17,20 @@ export function PowerToggle({
   isBooting,
   isShuttingDown,
   onToggle,
+  disabled,
   label,
 }: PowerToggleProps) {
   return (
     <button
       type="button"
       onClick={onToggle}
-      disabled={isProcessing}
+      disabled={disabled}
       aria-label={label}
       className={cn(
         'group/power relative flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
         'disabled:cursor-not-allowed',
         // Off state
-        !isOn && !isProcessing && 'bg-secondary hover:bg-secondary/80',
+        !isOn && !isProcessing && !isShuttingDown && 'bg-secondary hover:bg-secondary/80',
         // On state - glowing ring
         isOn &&
           !isProcessing &&
@@ -62,6 +64,7 @@ export function PowerToggle({
           'relative h-4 w-4 transition-colors duration-300',
           !isOn &&
             !isProcessing &&
+            !isShuttingDown &&
             'text-muted-foreground group-hover/power:text-primary',
           isOn && !isProcessing && 'text-primary',
           isBooting && 'text-primary',

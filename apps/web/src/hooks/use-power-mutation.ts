@@ -9,7 +9,7 @@ export function usePowerMutation(token: string | null) {
 
   const mutation = useMutation({
     mutationFn: (vars: { token: string; serverId: string; action: 'on' | 'off' }) =>
-      api.powerAction(vars.token, vars.serverId, vars.action),
+      api.transition(vars.token, vars.serverId, vars.action),
     onSuccess: (res, { serverId }) => {
       const replaceServerOptimistically = (prev: ServerView[] | undefined) =>
         prev?.map((s) => (s.id === serverId ? res.server : s)) ?? prev;
