@@ -1,16 +1,17 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import type {
   ListServersResponse,
   ServerStatusResponse,
   ServerCostResponse,
   ServerPingResponse,
-  TransitionRequest,
   TransitionResponse,
   MeResponse,
   ServerView,
 } from '@aws-gaming/contracts';
 import { getAuthContext } from '../middleware/auth.js';
 import type { AppDeps } from '../app-deps.js';
+import { jsonZodValidator } from '../utils/zod-validator.js';
+import { transitionRequestSchema } from './authenticated-api.schemas.js';
 
 type AuthenticatedApiEnv = {
   Variables: {
@@ -19,6 +20,21 @@ type AuthenticatedApiEnv = {
     costService: AppDeps['costService'];
   };
 };
+
+async function getAuthorizedInstance(c: Context<AuthenticatedApiEnv>, id: string) {
+  const { gameInstanceIds } = getAuthContext(c);
+  if (!gameInstanceIds.includes(id)) {
+    return { error: c.json({ error: 'Not authorized for this server' }, 403) } as const;
+  }
+
+  const repo = c.get('repo');
+  const instance = await repo.getInstance(id);
+  if (!instance) {
+    return { error: c.json({ error: 'Server not found' }, 404) } as const;
+  }
+
+  return { instance } as const;
+}
 
 export const authenticatedApiRoutes = new Hono<AuthenticatedApiEnv>();
 
@@ -50,41 +66,25 @@ authenticatedApiRoutes.get('/servers', async (c) => {
 });
 
 authenticatedApiRoutes.get('/servers/:id/status', async (c) => {
-  const repo = c.get('repo');
   const statusService = c.get('statusService');
-  const { gameInstanceIds } = getAuthContext(c);
   const id = c.req.param('id');
 
-  if (!gameInstanceIds.includes(id)) {
-    return c.json({ error: 'Not authorized for this server' }, 403);
-  }
+  const access = await getAuthorizedInstance(c, id);
+  if ('error' in access) return access.error;
 
-  const instance = await repo.getInstance(id);
-  if (!instance) {
-    return c.json({ error: 'Server not found' }, 404);
-  }
-
-  const view = await statusService.buildServerView(instance);
+  const view = await statusService.buildServerView(access.instance);
   return c.json({ server: view } satisfies ServerStatusResponse);
 });
 
 authenticatedApiRoutes.get('/servers/:id/cost', async (c) => {
-  const repo = c.get('repo');
   const costService = c.get('costService');
-  const { gameInstanceIds } = getAuthContext(c);
   const id = c.req.param('id');
 
-  if (!gameInstanceIds.includes(id)) {
-    return c.json({ error: 'Not authorized for this server' }, 403);
-  }
-
-  const instance = await repo.getInstance(id);
-  if (!instance) {
-    return c.json({ error: 'Server not found' }, 404);
-  }
+  const access = await getAuthorizedInstance(c, id);
+  if ('error' in access) return access.error;
 
   try {
-    const estimate = await costService.estimateHourlyCosts(instance);
+    const estimate = await costService.estimateHourlyCosts(access.instance);
     return c.json({ serverId: id, estimate } satisfies ServerCostResponse);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
@@ -100,22 +100,14 @@ authenticatedApiRoutes.get('/servers/:id/cost', async (c) => {
 });
 
 authenticatedApiRoutes.get('/servers/:id/ping', async (c) => {
-  const repo = c.get('repo');
   const statusService = c.get('statusService');
-  const { gameInstanceIds } = getAuthContext(c);
   const id = c.req.param('id');
 
-  if (!gameInstanceIds.includes(id)) {
-    return c.json({ error: 'Not authorized for this server' }, 403);
-  }
-
-  const instance = await repo.getInstance(id);
-  if (!instance) {
-    return c.json({ error: 'Server not found' }, 404);
-  }
+  const access = await getAuthorizedInstance(c, id);
+  if ('error' in access) return access.error;
 
   try {
-    const view = await statusService.buildServerView(instance);
+    const view = await statusService.buildServerView(access.instance);
     if (!view.healthEndpoint) {
       return c.json({
         serverId: id,
@@ -160,72 +152,60 @@ authenticatedApiRoutes.get('/servers/:id/ping', async (c) => {
   }
 });
 
-authenticatedApiRoutes.post('/servers/:id/power', async (c) => {
-  const repo = c.get('repo');
-  const statusService = c.get('statusService');
-  const { gameInstanceIds } = getAuthContext(c);
-  const id = c.req.param('id');
+authenticatedApiRoutes.post(
+  '/servers/:id/power',
+  jsonZodValidator(transitionRequestSchema),
+  async (c) => {
+    const statusService = c.get('statusService');
+    const id = c.req.param('id');
+    const body = c.req.valid('json');
 
-  if (!gameInstanceIds.includes(id)) {
-    return c.json({ error: 'Not authorized for this server' }, 403);
-  }
+    const access = await getAuthorizedInstance(c, id);
+    if ('error' in access) return access.error;
+    const instance = access.instance;
 
-  let body: TransitionRequest;
-  try {
-    body = await c.req.json<TransitionRequest>();
-  } catch {
-    return c.json({ error: 'Invalid JSON body' }, 400);
-  }
-  if (body.action !== 'on' && body.action !== 'off') {
-    return c.json({ error: 'Invalid action, must be "on" or "off"' }, 400);
-  }
+    let current: ServerView;
+    try {
+      current = await statusService.buildServerView(instance);
+    } catch (error) {
+      console.error('Failed to build current server view before transition', {
+        instanceId: id,
+        action: body.action,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return c.json({ error: 'Unable to read current server status' }, 502);
+    }
 
-  const instance = await repo.getInstance(id);
-  if (!instance) {
-    return c.json({ error: 'Server not found' }, 404);
-  }
+    if (body.action === 'on' && current.status === 'online') {
+      return c.json({ error: 'Server is already online' }, 409);
+    }
+    if (body.action === 'off' && current.status === 'offline') {
+      return c.json({ error: 'Server is already offline' }, 409);
+    }
 
-  let current: ServerView;
-  try {
-    current = await statusService.buildServerView(instance);
-  } catch (error) {
-    console.error('Failed to build current server view before transition', {
-      instanceId: id,
-      action: body.action,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return c.json({ error: 'Unable to read current server status' }, 502);
-  }
+    try {
+      await statusService.startTransition(instance, body.action);
+    } catch (error) {
+      console.error('Failed to start transition', {
+        instanceId: id,
+        action: body.action,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return c.json({ error: 'Failed to start transition' }, 502);
+    }
 
-  if (body.action === 'on' && current.status === 'online') {
-    return c.json({ error: 'Server is already online' }, 409);
-  }
-  if (body.action === 'off' && current.status === 'offline') {
-    return c.json({ error: 'Server is already offline' }, 409);
-  }
+    let view: ServerView;
+    try {
+      view = await statusService.buildServerView(instance);
+    } catch (error) {
+      console.error('Failed to build server view after transition start', {
+        instanceId: id,
+        action: body.action,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return c.json({ error: 'Transition started, but status refresh failed' }, 502);
+    }
 
-  try {
-    await statusService.startTransition(instance, body.action);
-  } catch (error) {
-    console.error('Failed to start transition', {
-      instanceId: id,
-      action: body.action,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return c.json({ error: 'Failed to start transition' }, 502);
-  }
-
-  let view: ServerView;
-  try {
-    view = await statusService.buildServerView(instance);
-  } catch (error) {
-    console.error('Failed to build server view after transition start', {
-      instanceId: id,
-      action: body.action,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return c.json({ error: 'Transition started, but status refresh failed' }, 502);
-  }
-
-  return c.json({ server: view } satisfies TransitionResponse);
-});
+    return c.json({ server: view } satisfies TransitionResponse);
+  },
+);

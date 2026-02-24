@@ -6,6 +6,7 @@ import type {
   BootstrapCreateAdminResponse,
 } from '@aws-gaming/contracts';
 import type { AppDeps } from '../app-deps.js';
+import { bootstrapAdminBodySchema } from './bootstrap.schemas.js';
 import { toAdminTokenView } from './token-utils.js';
 
 type BootstrapEnv = {
@@ -34,23 +35,13 @@ bootstrapRoutes.post('/admin', async (c) => {
     return c.json({ error: 'Bootstrap already completed' }, 409);
   }
 
-  let body: unknown = {};
-  try {
-    body = await c.req.json();
-  } catch {
-    body = {};
-  }
-
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+  const rawBody = await c.req.json().catch(() => ({}));
+  const parsedBody = bootstrapAdminBodySchema.safeParse(rawBody);
+  if (!parsedBody.success) {
     return c.json({ error: 'JSON body must be an object' }, 400);
   }
 
-  const input = body as Record<string, unknown>;
-  const label =
-    typeof input.label === 'string' && input.label.trim().length > 0
-      ? input.label.trim()
-      : 'Initial admin';
-
+  const label = parsedBody.data.label ?? 'Initial admin';
   const instanceIds = (await repo.listInstances()).map((instance) => instance.id);
   const rawToken = createOpaqueToken();
   const tokenHash = hashOpaqueToken(rawToken);
