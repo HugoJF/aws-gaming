@@ -2,7 +2,13 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { useAdminTokensQuery } from '@/hooks/use-admin-tokens-query';
-import { useTokenMutations } from '@/hooks/use-token-mutations';
+import type {
+  CreateTokenInput,
+  UpdateTokenInput,
+} from '@/hooks/token-mutations/types';
+import { useCreateTokenMutation } from '@/hooks/use-create-token-mutation';
+import { useUpdateTokenMutation } from '@/hooks/use-update-token-mutation';
+import { useRevokeTokenMutation } from '@/hooks/use-revoke-token-mutation';
 import { useAdminServersQuery } from '@/hooks/use-admin-servers-query';
 import { getHttpErrorMessage } from '@/lib/api';
 import { TokenList } from './token-list';
@@ -12,7 +18,7 @@ import { TabButton } from './tab-button';
 type AdminTab = 'tokens' | 'instances';
 
 interface AdminViewProps {
-  token: string | null;
+  token: string;
 }
 
 export function AdminView({ token }: AdminViewProps) {
@@ -23,14 +29,9 @@ export function AdminView({ token }: AdminViewProps) {
     loading: tokensLoading,
     error: tokensError,
   } = useAdminTokensQuery({ token });
-  const {
-    lastCreated,
-    error: mutationsError,
-    create,
-    update,
-    revoke,
-    dismissCreatedBanner,
-  } = useTokenMutations({ token });
+  const createMutation = useCreateTokenMutation({ token });
+  const updateMutation = useUpdateTokenMutation({ token });
+  const revokeMutation = useRevokeTokenMutation({ token });
   const {
     servers: instances,
     loading: serversLoading,
@@ -38,10 +39,27 @@ export function AdminView({ token }: AdminViewProps) {
   } = useAdminServersQuery({ token });
 
   const loading = tokensLoading || serversLoading;
+  const mutationsError =
+    createMutation.error ?? updateMutation.error ?? revokeMutation.error;
   const errorSource = tokensError ?? serversError ?? mutationsError;
   const error = errorSource
     ? getHttpErrorMessage(errorSource, 'Failed to load admin data')
     : null;
+
+  async function handleCreate(input: CreateTokenInput): Promise<void> {
+    await createMutation.mutateAsync(input);
+  }
+
+  async function handleUpdate(
+    tokenId: string,
+    input: UpdateTokenInput,
+  ): Promise<void> {
+    await updateMutation.mutateAsync({ tokenId, input });
+  }
+
+  async function handleRevoke(tokenId: string): Promise<void> {
+    await revokeMutation.mutateAsync(tokenId);
+  }
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
@@ -79,11 +97,11 @@ export function AdminView({ token }: AdminViewProps) {
         <TokenList
           tokens={tokens}
           instances={instances}
-          lastCreated={lastCreated}
-          onCreate={create}
-          onUpdate={update}
-          onRevoke={revoke}
-          onDismissBanner={dismissCreatedBanner}
+          lastCreated={createMutation.lastCreated}
+          onCreate={handleCreate}
+          onUpdate={handleUpdate}
+          onRevoke={handleRevoke}
+          onDismissBanner={createMutation.dismissCreatedBanner}
         />
       ) : (
         <InstanceList instances={instances} />

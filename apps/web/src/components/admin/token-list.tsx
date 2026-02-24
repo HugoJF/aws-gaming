@@ -5,7 +5,7 @@ import type {
   CreateTokenInput,
   CreateTokenResult,
   UpdateTokenInput,
-} from '@/hooks/use-token-mutations';
+} from '@/hooks/token-mutations/types';
 import { TokenRow } from './token-row';
 import { TokenCreatedBanner } from './token-created-banner';
 import { CreateTokenDialog } from './create-token-dialog';
