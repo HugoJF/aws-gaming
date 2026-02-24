@@ -13,6 +13,8 @@ type AppEnv = {
     repo: AppDeps['repo'];
     statusService: AppDeps['statusService'];
     costService: AppDeps['costService'];
+    adminService: AppDeps['adminService'];
+    bootstrapService: AppDeps['bootstrapService'];
   };
 };
 
@@ -38,7 +40,7 @@ app.get('/health', (c) => c.json({ status: 'ok' }));
 
 /* One-time bootstrap routes (no auth) */
 app.use('/api/bootstrap/*', async (c, next) => {
-  c.set('repo', deps.repo);
+  c.set('bootstrapService', deps.bootstrapService);
   await next();
 });
 app.route('/api/bootstrap', bootstrapRoutes);
@@ -49,6 +51,7 @@ app.use('/api/*', async (c, next) => {
   c.set('repo', deps.repo);
   c.set('statusService', deps.statusService);
   c.set('costService', deps.costService);
+  c.set('adminService', deps.adminService);
   await next();
 });
 app.use('/api/admin/*', deps.adminMiddleware);

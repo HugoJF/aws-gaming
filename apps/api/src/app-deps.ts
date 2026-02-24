@@ -2,12 +2,16 @@ import { AsgControl, EcsControl, Ec2Control, DnsControl } from '@aws-gaming/aws-
 import { Repository } from './db/repository.js';
 import { StatusService } from './services/status.js';
 import { CostService } from './services/cost.js';
+import { AdminService } from './services/admin.js';
+import { BootstrapService } from './services/bootstrap.js';
 import { createAuthMiddleware, createAdminMiddleware } from './middleware/auth.js';
 
 export interface AppDeps {
   repo: Repository;
   statusService: StatusService;
   costService: CostService;
+  adminService: AdminService;
+  bootstrapService: BootstrapService;
   authMiddleware: ReturnType<typeof createAuthMiddleware>;
   adminMiddleware: ReturnType<typeof createAdminMiddleware>;
 }
@@ -32,11 +36,14 @@ export function createAppDeps(env: NodeJS.ProcessEnv = process.env): AppDeps {
     new Ec2Control(region),
     new DnsControl(region),
   );
+  const adminService = new AdminService(repo, statusService);
 
   return {
     repo,
     statusService,
     costService: new CostService(region),
+    adminService,
+    bootstrapService: new BootstrapService(repo, adminService),
     authMiddleware: createAuthMiddleware(repo),
     adminMiddleware: createAdminMiddleware(),
   };
