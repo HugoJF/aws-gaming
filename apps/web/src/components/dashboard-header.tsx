@@ -1,6 +1,6 @@
-import { cn } from '@/lib/utils';
-
-type AdminView = 'servers' | 'admin';
+import type { AdminView } from '@/components/dashboard-header/types';
+import { Stat } from '@/components/dashboard-header/stat';
+import { ViewSwitcher } from '@/components/dashboard-header/view-switcher';
 
 interface DashboardHeaderProps {
   serverCount: number;
@@ -41,79 +41,5 @@ export function DashboardHeader({
         </div>
       </div>
     </header>
-  );
-}
-
-function ViewSwitcher({
-  current,
-  onChange,
-}: {
-  current: AdminView;
-  onChange: (view: AdminView) => void;
-}) {
-  return (
-    <div className="flex rounded-md border border-border bg-muted/50 p-0.5">
-      <SwitcherButton
-        active={current === 'servers'}
-        onClick={() => onChange('servers')}
-      >
-        Servers
-      </SwitcherButton>
-      <SwitcherButton
-        active={current === 'admin'}
-        onClick={() => onChange('admin')}
-      >
-        Admin
-      </SwitcherButton>
-    </div>
-  );
-}
-
-function SwitcherButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        'rounded-[5px] px-3 py-1 text-xs font-medium transition-colors',
-        active
-          ? 'bg-background text-foreground shadow-sm'
-          : 'text-muted-foreground hover:text-foreground',
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  highlight,
-}: {
-  label: string;
-  value: string;
-  highlight?: boolean;
-}) {
-  return (
-    <div className="text-right">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p
-        className={
-          highlight
-            ? 'text-sm font-semibold text-primary'
-            : 'text-sm font-semibold text-foreground'
-        }
-      >
-        {value}
-      </p>
-    </div>
   );
 }

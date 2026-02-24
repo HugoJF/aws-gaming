@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { useAdminTokensQuery } from '@/hooks/use-admin-tokens-query';
 import { useTokenMutations } from '@/hooks/use-token-mutations';
 import { useAdminServersQuery } from '@/hooks/use-admin-servers-query';
 import { getHttpErrorMessage } from '@/lib/api';
 import { TokenList } from './token-list';
 import { InstanceList } from './instance-list';
+import { TabButton } from './tab-button';
 
 type AdminTab = 'tokens' | 'instances';
 
@@ -89,29 +89,5 @@ export function AdminView({ token }: AdminViewProps) {
         <InstanceList instances={instances} />
       )}
     </main>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        'pb-2.5 text-sm font-medium transition-colors border-b-2 -mb-px',
-        active
-          ? 'border-primary text-foreground'
-          : 'border-transparent text-muted-foreground hover:text-foreground',
-      )}
-    >
-      {children}
-    </button>
   );
 }

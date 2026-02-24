@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { ArrowRight, KeyRound, Loader2 } from 'lucide-react';
+import { KeyRound, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useBootstrapStatusQuery } from '@/hooks/use-bootstrap-status-query';
 import { parseTokenInput } from '@/lib/token-input';
+import { BootstrapCreateAdminForm } from '@/components/bootstrap-screen/bootstrap-create-admin-form';
+import { ManualTokenEntryForm } from '@/components/bootstrap-screen/manual-token-entry-form';
 
 interface BootstrapScreenProps {
   onTokenSubmit: (token: string) => void;
@@ -11,83 +13,6 @@ interface BootstrapScreenProps {
   onBootstrapCompleted: () => void;
   authError?: string | null;
   onDismissAuthError?: () => void;
-}
-
-interface BootstrapCreateAdminFormProps {
-  label: string;
-  creating: boolean;
-  onLabelChange: (nextLabel: string) => void;
-  onSubmit: (e: React.FormEvent) => void;
-}
-
-function BootstrapCreateAdminForm({
-  label,
-  creating,
-  onLabelChange,
-  onSubmit,
-}: BootstrapCreateAdminFormProps) {
-  return (
-    <form onSubmit={onSubmit} className="mt-5 flex flex-col gap-3">
-      <input
-        type="text"
-        value={label}
-        onChange={(e) => onLabelChange(e.target.value)}
-        placeholder="Admin label"
-        className="w-full rounded-lg border border-border bg-card px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-      />
-      <button
-        type="submit"
-        disabled={creating}
-        className="flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
-      >
-        {creating ? (
-          <>
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Initializing...
-          </>
-        ) : (
-          <>
-            Initialize Admin
-            <ArrowRight className="h-4 w-4" />
-          </>
-        )}
-      </button>
-    </form>
-  );
-}
-
-interface ManualTokenEntryFormProps {
-  input: string;
-  onInputChange: (nextInput: string) => void;
-  onSubmit: (e: React.FormEvent) => void;
-}
-
-function ManualTokenEntryForm({
-  input,
-  onInputChange,
-  onSubmit,
-}: ManualTokenEntryFormProps) {
-  const parsedToken = parseTokenInput(input);
-
-  return (
-    <form onSubmit={onSubmit} className="mt-3 flex flex-col gap-3">
-      <input
-        type="text"
-        value={input}
-        onChange={(e) => onInputChange(e.target.value)}
-        placeholder="Paste token or access link"
-        className="w-full rounded-lg border border-border bg-card px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-      />
-      <button
-        type="submit"
-        disabled={parsedToken === null}
-        className="flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
-      >
-        Continue
-        <ArrowRight className="h-4 w-4" />
-      </button>
-    </form>
-  );
 }
 
 export function BootstrapScreen({
