@@ -9,22 +9,20 @@ export function serverCostQueryKey(
 }
 
 export function useServerCostQuery(token: string | null, serverId: string) {
+  const enabled = Boolean(token) && serverId.length > 0;
+
   const query = useQuery({
     queryKey: serverCostQueryKey(token, serverId),
-    enabled: Boolean(token) && serverId.length > 0,
+    enabled,
     staleTime: 5 * 60_000,
     gcTime: 30 * 60_000,
     refetchOnWindowFocus: false,
-    queryFn: async () => {
-      if (!token) throw new Error('Missing auth token');
-      const res = await api.getServerCost(token, serverId);
-      return res.data.estimate;
-    },
+    queryFn: () => api.getServerCost(token!, serverId),
   });
 
   return {
-    estimate: query.data ?? null,
-    loading: query.isPending,
+    estimate: query.data?.data.estimate ?? null,
+    loading: enabled && query.isPending,
     error: query.error,
   };
 }

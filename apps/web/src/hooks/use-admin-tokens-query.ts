@@ -10,21 +10,19 @@ interface UseAdminTokensQueryOptions {
 }
 
 export function useAdminTokensQuery({ token }: UseAdminTokensQueryOptions) {
+  const enabled = Boolean(token);
+
   const query = useQuery({
     queryKey: adminTokensQueryKey(token),
-    enabled: Boolean(token),
+    enabled,
     staleTime: 30_000,
     gcTime: 10 * 60_000,
-    queryFn: async () => {
-      if (!token) return [];
-      const res = await api.adminListTokens(token);
-      return res.data.tokens;
-    },
+    queryFn: () => api.adminListTokens(token!),
   });
 
   return {
-    tokens: query.data ?? [],
-    loading: Boolean(token) && query.isPending,
+    tokens: query.data?.data.tokens ?? [],
+    loading: enabled && query.isPending,
     error: query.error,
   };
 }

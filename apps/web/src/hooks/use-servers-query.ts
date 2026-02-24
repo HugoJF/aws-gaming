@@ -24,20 +24,22 @@ export function serversQueryKey(token: string | null) {
 }
 
 export function useServersQuery(token: string | null) {
+  const enabled = Boolean(token);
+
   const query = useQuery({
     queryKey: serversQueryKey(token),
-    enabled: Boolean(token),
+    enabled,
     staleTime: 5_000,
     gcTime: 10 * 60_000,
     refetchOnWindowFocus: false,
     refetchInterval: (q) =>
-      getRefetchInterval(q.state.data as ServerView[] | undefined),
-    queryFn: () => api.listServers(token!).then((res) => res.data.servers),
+      getRefetchInterval(q.state.data?.data.servers),
+    queryFn: () => api.listServers(token!),
   });
 
   return {
-    servers: query.data ?? [],
-    loading: query.isPending,
+    servers: query.data?.data.servers ?? [],
+    loading: enabled && query.isPending,
     error: query.error,
   };
 }

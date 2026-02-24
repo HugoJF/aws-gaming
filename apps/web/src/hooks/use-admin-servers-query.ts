@@ -10,21 +10,19 @@ interface UseAdminServersQueryOptions {
 }
 
 export function useAdminServersQuery({ token }: UseAdminServersQueryOptions) {
+  const enabled = Boolean(token);
+
   const query = useQuery({
     queryKey: adminServersQueryKey(token),
-    enabled: Boolean(token),
+    enabled,
     staleTime: 30_000,
     gcTime: 10 * 60_000,
-    queryFn: async () => {
-      if (!token) return [];
-      const res = await api.adminListServers(token);
-      return res.data.servers;
-    },
+    queryFn: () => api.adminListServers(token!),
   });
 
   return {
-    servers: query.data ?? [],
-    loading: Boolean(token) && query.isPending,
+    servers: query.data?.data.servers ?? [],
+    loading: enabled && query.isPending,
     error: query.error,
   };
 }
