@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
-import type { ServerView } from '@aws-gaming/contracts';
+import type { PowerAction, ServerView } from '@aws-gaming/contracts';
 import { useAuth } from '@/hooks/use-auth';
 import { useServersQuery } from '@/hooks/use-servers-query';
 import { usePowerMutation } from '@/hooks/use-power-mutation';
@@ -112,7 +112,7 @@ interface DashboardRouteProps {
   servers: ServerView[];
   loading: boolean;
   error: string | null;
-  onTogglePower: (serverId: string, action: 'on' | 'off') => void;
+  onTogglePower: (serverId: string, action: PowerAction) => void;
   pendingServerId: string | null;
 }
 

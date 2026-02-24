@@ -14,6 +14,8 @@ export type ServerStatus =
   | 'shutting-down'
   | 'error';
 
+export type PowerAction = 'on' | 'off';
+
 export type HealthCheckStatus = 'healthy' | 'unhealthy';
 
 export interface HealthCheck {
@@ -71,7 +73,7 @@ export interface PowerStage {
  *  Only stores intent + which side-effect actions have been fired.
  *  Stage completion status is always computed from live AWS state. */
 export interface TransitionIntent {
-  action: 'on' | 'off';
+  action: PowerAction;
   /** Stage IDs whose action() side effects have been fired. */
   firedActions: PowerStageId[];
   startedAt: string;
@@ -143,7 +145,7 @@ export interface GameInstance {
   taskCount: number;
 
   /* User's desired power state. Status is always computed from AWS. */
-  desiredState?: 'on' | 'off';
+  desiredState?: PowerAction;
 }
 
 /* ------------------------------------------------------------------ */
@@ -235,7 +237,7 @@ export interface ServerPingResponse {
 }
 
 export interface TransitionRequest {
-  action: 'on' | 'off';
+  action: PowerAction;
 }
 
 export interface TransitionResponse {

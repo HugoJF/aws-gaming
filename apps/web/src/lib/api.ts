@@ -19,6 +19,7 @@ import type {
   BootstrapStatusResponse,
   BootstrapCreateAdminRequest,
   BootstrapCreateAdminResponse,
+  PowerAction,
 } from '@aws-gaming/contracts';
 
 const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
@@ -117,7 +118,7 @@ export const api = {
     return request<ServerPingResponse>(`/api/servers/${serverId}/ping`, token);
   },
 
-  transition(token: string, serverId: string, action: 'on' | 'off') {
+  transition(token: string, serverId: string, action: PowerAction) {
     return request<TransitionResponse>(`/api/servers/${serverId}/power`, token, {
       method: 'POST',
       data: { action },

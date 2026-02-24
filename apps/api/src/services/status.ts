@@ -13,6 +13,7 @@ import type {
   TransitionIntent,
   PowerStage,
   PowerStageId,
+  PowerAction,
   CachedServerStatus,
 } from '@aws-gaming/contracts';
 import type { Repository } from '../db/repository.js';
@@ -35,7 +36,7 @@ export class StatusService {
     private dns: DnsControl,
   ) {}
 
-  private applicableStages(instance: GameInstance, action: 'on' | 'off') {
+  private applicableStages(instance: GameInstance, action: PowerAction) {
     const all = action === 'on' ? BOOT_STAGES : SHUTDOWN_STAGES;
     return all.filter((s) => !s.appliesTo || s.appliesTo(instance));
   }
@@ -99,7 +100,7 @@ export class StatusService {
   ): Promise<PowerStage[]> {
     if (status === 'offline' || status === 'online' || status === 'error') return [];
 
-    const action: 'on' | 'off' = status === 'booting' ? 'on' : 'off';
+    const action: PowerAction = status === 'booting' ? 'on' : 'off';
     const stageDefs = this.applicableStages(instance, action);
     const ctx = this.stageContext(instance);
 
@@ -205,7 +206,7 @@ export class StatusService {
 
   private async allStagesMet(
     instance: GameInstance,
-    action: 'on' | 'off',
+    action: PowerAction,
   ): Promise<boolean> {
     const ctx = this.stageContext(instance);
     const stageDefs = this.applicableStages(instance, action);
@@ -409,7 +410,7 @@ export class StatusService {
 
   async startTransition(
     instance: GameInstance,
-    action: 'on' | 'off',
+    action: PowerAction,
   ): Promise<TransitionIntent> {
     const now = new Date();
     const ctx = this.stageContext(instance);
