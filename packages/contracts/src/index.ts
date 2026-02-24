@@ -14,7 +14,7 @@ export type ServerStatus =
   | 'shutting-down'
   | 'error';
 
-export type HealthCheckStatus = 'healthy' | 'unhealthy' | 'degraded' | 'unknown';
+export type HealthCheckStatus = 'healthy' | 'unhealthy';
 
 export interface HealthCheck {
   name: string;

@@ -234,11 +234,11 @@ export class StatusService {
   ): HealthCheck[] {
     if (status === 'offline') {
       return [
-        { name: 'EC2 Instance', status: 'unknown', detail: 'Server is off' },
-        { name: 'ECS Task', status: 'unknown', detail: 'Server is off' },
-        { name: 'Game Process', status: 'unknown', detail: 'Server is off' },
-        { name: 'DNS', status: 'unknown', detail: 'Server is off' },
-        { name: 'Network', status: 'unknown', detail: 'Server is off' },
+        { name: 'EC2 Instance', status: 'unhealthy', detail: 'Server is off' },
+        { name: 'ECS Task', status: 'unhealthy', detail: 'Server is off' },
+        { name: 'Game Process', status: 'unhealthy', detail: 'Server is off' },
+        { name: 'DNS', status: 'unhealthy', detail: 'Server is off' },
+        { name: 'Network', status: 'unhealthy', detail: 'Server is off' },
       ];
     }
 
@@ -249,16 +249,10 @@ export class StatusService {
       const inService = asgStatus.instances.filter(
         (i) => i.lifecycleState === 'InService',
       );
-      if (inService.length === 0) {
+      if (inService.length < asgStatus.desiredCapacity) {
         checks.push({
           name: 'EC2 Instance',
           status: 'unhealthy',
-          detail: 'No instances InService',
-        });
-      } else if (inService.length < asgStatus.desiredCapacity) {
-        checks.push({
-          name: 'EC2 Instance',
-          status: 'degraded',
           detail: `${inService.length}/${asgStatus.desiredCapacity} InService`,
         });
       } else {
@@ -271,7 +265,7 @@ export class StatusService {
     } else {
       checks.push({
         name: 'EC2 Instance',
-        status: 'unknown',
+        status: 'unhealthy',
         detail: 'Unable to query ASG',
       });
     }
@@ -286,40 +280,18 @@ export class StatusService {
       if (ecsStatus.desiredCount === 0) {
         checks.push({
           name: 'ECS Task',
-          status: 'unknown',
+          status: 'unhealthy',
           detail: 'Service scaled to zero',
-        });
-      } else if (ecsStatus.runningCount === 0) {
-        checks.push({
-          name: 'ECS Task',
-          status: 'unhealthy',
-          detail: 'No tasks running',
-        });
-      } else if (ecsStatus.unhealthyTaskCount > 0) {
-        checks.push({
-          name: 'ECS Task',
-          status: 'unhealthy',
-          detail: `${ecsStatus.runningCount}/${ecsStatus.desiredCount} running${healthSummary}`,
         });
       } else if (
         ecsStatus.runningCount < ecsStatus.desiredCount ||
-        ecsStatus.pendingCount > 0
+        ecsStatus.pendingCount > 0 ||
+        ecsStatus.unhealthyTaskCount > 0 ||
+        ecsStatus.unknownHealthTaskCount > 0
       ) {
         checks.push({
           name: 'ECS Task',
-          status: 'degraded',
-          detail: `${ecsStatus.runningCount}/${ecsStatus.desiredCount} running${healthSummary}`,
-        });
-      } else if (ecsStatus.healthyTaskCount > 0) {
-        checks.push({
-          name: 'ECS Task',
-          status: 'healthy',
-          detail: `${ecsStatus.runningCount}/${ecsStatus.desiredCount} running${healthSummary}`,
-        });
-      } else if (ecsStatus.unknownHealthTaskCount > 0) {
-        checks.push({
-          name: 'ECS Task',
-          status: 'unknown',
+          status: 'unhealthy',
           detail: `${ecsStatus.runningCount}/${ecsStatus.desiredCount} running${healthSummary}`,
         });
       } else {
@@ -332,7 +304,7 @@ export class StatusService {
     } else {
       checks.push({
         name: 'ECS Task',
-        status: 'unknown',
+        status: 'unhealthy',
         detail: 'Unable to query ECS',
       });
     }
@@ -341,7 +313,7 @@ export class StatusService {
     if (instance.gameType === 'generic') {
       checks.push({
         name: 'Game Process',
-        status: ecsStatus && ecsStatus.runningCount > 0 ? 'healthy' : 'unknown',
+        status: ecsStatus && ecsStatus.runningCount > 0 ? 'healthy' : 'unhealthy',
         detail:
           ecsStatus && ecsStatus.runningCount > 0
             ? 'Generic mode (GameDig disabled)'
@@ -362,13 +334,13 @@ export class StatusService {
     } else if (ecsStatus && ecsStatus.runningCount > 0) {
       checks.push({
         name: 'Game Process',
-        status: 'unknown',
+        status: 'unhealthy',
         detail: 'No DNS or public IP available for GameDig',
       });
     } else {
       checks.push({
         name: 'Game Process',
-        status: 'unknown',
+        status: 'unhealthy',
         detail: 'No running tasks',
       });
     }
@@ -377,7 +349,7 @@ export class StatusService {
     if (instance.dnsName && instance.route53ZoneId) {
       checks.push({
         name: 'DNS',
-        status: status === 'online' ? 'healthy' : 'unknown',
+        status: status === 'online' ? 'healthy' : 'unhealthy',
         detail: instance.dnsName,
       });
     } else {
@@ -391,7 +363,7 @@ export class StatusService {
     // Network check (reported by frontend, API provides last known)
     checks.push({
       name: 'Network',
-      status: status === 'online' ? 'healthy' : 'unknown',
+      status: status === 'online' ? 'healthy' : 'unhealthy',
       detail: 'Reported by browser',
     });
 

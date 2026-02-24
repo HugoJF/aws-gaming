@@ -28,8 +28,6 @@ import {
   DollarSign,
   CircleCheck,
   CircleX,
-  CircleMinus,
-  CircleHelp,
   Activity,
   Loader2,
 } from 'lucide-react';
@@ -369,14 +367,10 @@ function CostRow({ component }: { component: CostComponent }) {
   );
 }
 
-function getOverallHealth(
-  checks?: HealthCheck[],
-): HealthCheckStatus | undefined {
-  if (!checks || checks.length === 0) return undefined;
-  if (checks.some((c) => c.status === 'unhealthy')) return 'unhealthy';
-  if (checks.some((c) => c.status === 'degraded')) return 'degraded';
-  if (checks.every((c) => c.status === 'unknown')) return 'unknown';
-  return 'healthy';
+function getOverallHealth(checks: HealthCheck[]): HealthCheckStatus {
+  return checks.length > 0 && checks.every((c) => c.status === 'healthy')
+    ? 'healthy'
+    : 'unhealthy';
 }
 
 const HEALTH_ICON: Record<
@@ -384,37 +378,46 @@ const HEALTH_ICON: Record<
   React.ComponentType<{ className?: string }>
 > = {
   healthy: CircleCheck,
-  degraded: CircleMinus,
   unhealthy: CircleX,
-  unknown: CircleHelp,
 };
 
 const HEALTH_COLOR: Record<HealthCheckStatus, string> = {
   healthy: 'text-primary',
-  degraded: 'text-amber-400',
   unhealthy: 'text-destructive',
-  unknown: 'text-muted-foreground',
 };
 
 const HEALTH_DOT_COLOR: Record<HealthCheckStatus, string> = {
   healthy: 'bg-primary',
-  degraded: 'bg-amber-400',
   unhealthy: 'bg-destructive',
-  unknown: 'bg-muted-foreground',
 };
+
+const STATUS_DOT_CLASS = {
+  offline: 'bg-muted-foreground',
+  error: 'bg-destructive',
+  booting: 'bg-primary animate-pulse',
+  'shutting-down': 'bg-destructive animate-pulse',
+} satisfies Partial<Record<ServerStatus, string>>;
 
 function getBadgeLabel(
   status: ServerStatus,
-  overallHealth?: HealthCheckStatus,
+  overallHealth: HealthCheckStatus,
 ): string {
   if (status === 'booting') return 'Booting';
   if (status === 'shutting-down') return 'Stopping';
   if (status === 'offline') return 'Offline';
   if (status === 'error') return 'Error';
-  if (overallHealth === 'healthy') return 'Healthy';
-  if (overallHealth === 'degraded') return 'Degraded';
-  if (overallHealth === 'unknown') return 'Unknown';
-  return 'Unhealthy';
+  return overallHealth === 'unhealthy' ? 'Unhealthy' : 'Healthy';
+}
+
+function getStatusDotClass(
+  status: ServerStatus,
+  overallHealth: HealthCheckStatus,
+): string {
+  if (status === 'online') {
+    return HEALTH_DOT_COLOR[overallHealth];
+  }
+
+  return STATUS_DOT_CLASS[status] ?? 'bg-destructive animate-pulse';
 }
 
 /* -- Status Badge with Health HoverCard ----------------------- */
@@ -426,34 +429,19 @@ function StatusBadge({
   lastUpdatedAt,
 }: {
   status: ServerStatus;
-  healthChecks?: HealthCheck[];
-  overallHealth?: HealthCheckStatus;
+  healthChecks: HealthCheck[];
+  overallHealth: HealthCheckStatus;
   lastUpdatedAt?: string;
 }) {
   const relativeTime = useRelativeTime(lastUpdatedAt);
   const hasChecks =
     (status === 'online' || status === 'offline' || status === 'error') &&
-    healthChecks &&
     healthChecks.length > 0;
 
-  const dotColor =
-    status === 'online' && overallHealth
-      ? HEALTH_DOT_COLOR[overallHealth]
-      : status === 'online'
-        ? 'bg-primary'
-        : status === 'offline'
-          ? 'bg-muted-foreground'
-          : status === 'error'
-            ? 'bg-destructive'
-            : status === 'booting'
-              ? 'bg-primary animate-pulse'
-              : 'bg-destructive animate-pulse';
+  const dotColor = getStatusDotClass(status, overallHealth);
 
-  const needsAttention =
-    status === 'online' &&
-    overallHealth &&
-    overallHealth !== 'healthy' &&
-    overallHealth !== 'unknown';
+  const needsAttention = status === 'online' && overallHealth === 'unhealthy';
+  const issueCount = healthChecks.filter((c) => c.status !== 'healthy').length;
 
   const label = getBadgeLabel(status, overallHealth);
 
@@ -461,21 +449,16 @@ function StatusBadge({
     <Badge
       className={cn(
         'gap-1.5 border-0 px-2.5 py-0.5 text-xs font-medium transition-colors',
-        status === 'online' &&
-          overallHealth === 'healthy' &&
-          'bg-primary/10 text-primary',
-        status === 'online' &&
-          overallHealth === 'degraded' &&
-          'bg-amber-400/10 text-amber-400',
-        status === 'online' &&
-          overallHealth === 'unhealthy' &&
-          'bg-destructive/10 text-destructive',
-        status === 'online' && !overallHealth && 'bg-primary/10 text-primary',
-        status === 'offline' && 'bg-secondary text-muted-foreground',
-        status === 'error' && 'bg-destructive/10 text-destructive',
-        status === 'booting' && 'bg-primary/10 text-primary',
-        status === 'shutting-down' && 'bg-destructive/10 text-destructive',
-        hasChecks && 'cursor-default',
+        {
+          'bg-primary/10 text-primary':
+            (status === 'online' && overallHealth !== 'unhealthy') || status === 'booting',
+          'bg-destructive/10 text-destructive':
+            (status === 'online' && overallHealth === 'unhealthy') ||
+            status === 'error' ||
+            status === 'shutting-down',
+          'bg-secondary text-muted-foreground': status === 'offline',
+          'cursor-default': hasChecks,
+        },
       )}
     >
       <span
@@ -486,15 +469,9 @@ function StatusBadge({
         )}
       />
       {label}
-      {needsAttention && healthChecks && (
-        <span
-          className={cn(
-            'ml-0.5 text-[10px] opacity-60',
-            overallHealth === 'degraded' && 'text-amber-400',
-            overallHealth === 'unhealthy' && 'text-destructive',
-          )}
-        >
-          {`- ${healthChecks.filter((c) => c.status !== 'healthy').length} issue${healthChecks.filter((c) => c.status !== 'healthy').length !== 1 ? 's' : ''}`}
+      {needsAttention && (
+        <span className="ml-0.5 text-[10px] text-destructive opacity-60">
+          {`- ${issueCount} issue${issueCount !== 1 ? 's' : ''}`}
         </span>
       )}
     </Badge>
@@ -520,7 +497,7 @@ function StatusBadge({
           </div>
         </div>
         <div className="py-1">
-          {healthChecks!.map((check) => {
+          {healthChecks.map((check) => {
             const Icon = HEALTH_ICON[check.status];
             return (
               <div
