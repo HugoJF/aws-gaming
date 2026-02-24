@@ -27,12 +27,15 @@ export function StageRow({ stage, isBoot, nowMs }: StageRowProps) {
     <div
       className={cn(
         'flex items-center gap-2.5 rounded px-2 py-1 font-mono text-xs transition-all duration-300',
-        stage.status === 'completed' && 'text-muted-foreground',
-        stage.status === 'in_progress' &&
-          (isBoot ? 'text-primary' : 'text-destructive'),
-        stage.status === 'pending' && 'text-muted-foreground/40',
-        stage.status === 'failed' && 'text-destructive',
-        isTimedOut && 'text-amber-400',
+        {
+          'text-muted-foreground': stage.status === 'completed',
+          'text-primary': stage.status === 'in_progress' && isBoot,
+          'text-destructive':
+            (stage.status === 'in_progress' && !isBoot) ||
+            stage.status === 'failed',
+          'text-muted-foreground/40': stage.status === 'pending',
+          'text-amber-400': isTimedOut,
+        },
       )}
     >
       <StageIcon status={stage.status} isBoot={isBoot} />

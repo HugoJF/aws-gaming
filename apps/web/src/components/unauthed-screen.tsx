@@ -32,7 +32,7 @@ export function UnauthedScreen({
         </div>
 
         <h1 className="mt-5 text-xl font-semibold text-foreground">
-          ServerDeck
+          AWS Gaming
         </h1>
 
         {authError && (

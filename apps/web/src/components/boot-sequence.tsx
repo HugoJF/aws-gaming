@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useInterval } from 'usehooks-ts';
 import { cn } from '@/lib/utils';
 import type { PowerStage } from '@aws-gaming/contracts';
 import { StageRow } from '@/components/boot-sequence/stage-row';
-
-export type { PowerStage as Stage };
 
 interface BootSequenceProps {
   type: 'boot' | 'shutdown';
@@ -11,18 +10,13 @@ interface BootSequenceProps {
 }
 
 export function BootSequence({ type, stages }: BootSequenceProps) {
-  // TODO: this is not needed
-  if (stages.length === 0) return null;
-
   const [nowMs, setNowMs] = useState(() => Date.now());
-  useEffect(() => {
-    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, []);
+  useInterval(() => setNowMs(Date.now()), stages.length > 0 ? 1_000 : null);
 
   const isBoot = type === 'boot';
   const completedCount = stages.filter((s) => s.status === 'completed').length;
-  const progressPercent = (completedCount / stages.length) * 100;
+  const progressPercent =
+    stages.length > 0 ? (completedCount / stages.length) * 100 : 0;
   const hasFailed = stages.some((s) => s.status === 'failed');
 
   return (

@@ -23,7 +23,7 @@ export function DashboardHeader({
         {/* Title */}
         <div className="flex items-center gap-4">
           <div>
-            <h1 className="text-lg font-semibold text-foreground">ServerDeck</h1>
+            <h1 className="text-lg font-semibold text-foreground">AWS Gaming</h1>
             <p className="text-xs text-muted-foreground">Game Panel</p>
           </div>
 

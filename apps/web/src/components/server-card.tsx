@@ -21,6 +21,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import type {
+  PowerAction,
   ServerView,
   GameType,
 } from '@aws-gaming/contracts';
@@ -60,7 +61,7 @@ const GAME_CONFIG: Record<
 interface ServerCardProps {
   token: string | null;
   server: ServerView;
-  onTogglePower: (serverId: string, action: 'on' | 'off') => void;
+  onTogglePower: (serverId: string, action: PowerAction) => void;
   powerPending?: boolean;
 }
 
@@ -81,7 +82,7 @@ export function ServerCard({ token, server, onTogglePower, powerPending }: Serve
     status: server.status,
   });
 
-  const targetAction: 'on' | 'off' = server.status === 'offline' ? 'on' : 'off';
+  const targetAction: PowerAction = server.status === 'offline' ? 'on' : 'off';
 
   const handleToggle = useCallback(() => {
     if (powerPending) return;
@@ -111,11 +112,13 @@ export function ServerCard({ token, server, onTogglePower, powerPending }: Serve
     <div
       className={cn(
         'group relative rounded-xl border bg-card transition-all duration-300',
-        isOnline && gameConfig.accentBorder,
-        server.status === 'offline' && 'border-border',
-        server.status === 'error' && 'border-destructive/30',
-        isBooting && 'border-primary/30',
-        isShuttingDown && 'border-destructive/30',
+        {
+          [gameConfig.accentBorder]: isOnline,
+          'border-border': server.status === 'offline',
+          'border-destructive/30':
+            server.status === 'error' || isShuttingDown,
+          'border-primary/30': isBooting,
+        },
       )}
     >
       {isOnline && (

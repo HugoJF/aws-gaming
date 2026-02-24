@@ -75,7 +75,7 @@ export function BootstrapScreen({
         </div>
 
         <h1 className="mt-5 text-xl font-semibold text-foreground">
-          Bootstrap ServerDeck
+          Bootstrap AWS Gaming
         </h1>
 
         {authError && (
