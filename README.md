@@ -42,7 +42,7 @@ bun run dev:web
 ## Build And Validate
 
 ```bash
-# workspace build/typecheck (note: apps/design is intentionally excluded from root scripts)
+# workspace build/typecheck
 bun run build
 bun run typecheck
 
