@@ -13,6 +13,12 @@
 - Infrastructure: Terraform (`infra/terraform`).
 - Do not add Bun/WebSocket/Bun.serve patterns unless explicitly requested; they are not current project defaults.
 
+## API Route Rules
+
+- Define route trees statically in route modules (for example `export const adminRoutes = new Hono()`).
+- Do not create runtime route factory functions like `create*Routes(...)` only to inject dependencies.
+- Inject shared API dependencies at app wiring level (`apps/api/src/index.ts`) via context variables and mount static routes.
+
 ## Development Commands
 
 - Start API: `bun run dev:api`

@@ -1,13 +1,22 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { handle } from 'hono/aws-lambda';
-import { createAppDeps } from './app-deps.js';
-import { createBootstrapRoutes } from './routes/bootstrap.js';
-import { createAuthenticatedApiRoutes } from './routes/authenticated-api.js';
+import { createAppDeps, type AppDeps } from './app-deps.js';
+import { bootstrapRoutes } from './routes/bootstrap.js';
+import { authenticatedApiRoutes } from './routes/authenticated-api.js';
+import { adminRoutes } from './routes/admin.js';
 
 const deps = createAppDeps();
 
-const app = new Hono();
+type AppEnv = {
+  Variables: {
+    repo: AppDeps['repo'];
+    statusService: AppDeps['statusService'];
+    costService: AppDeps['costService'];
+  };
+};
+
+const app = new Hono<AppEnv>();
 
 app.onError((err, c) => {
   console.error('Unhandled API error', {
@@ -28,10 +37,23 @@ if (!process.env.AWS_LAMBDA_FUNCTION_NAME) {
 app.get('/health', (c) => c.json({ status: 'ok' }));
 
 /* One-time bootstrap routes (no auth) */
-app.route('/api/bootstrap', createBootstrapRoutes(deps));
+app.use('/api/bootstrap/*', async (c, next) => {
+  c.set('repo', deps.repo);
+  await next();
+});
+app.route('/api/bootstrap', bootstrapRoutes);
 
 /* Auth-protected API routes */
-app.route('/api', createAuthenticatedApiRoutes(deps));
+app.use('/api/*', deps.authMiddleware);
+app.use('/api/*', async (c, next) => {
+  c.set('repo', deps.repo);
+  c.set('statusService', deps.statusService);
+  c.set('costService', deps.costService);
+  await next();
+});
+app.use('/api/admin/*', deps.adminMiddleware);
+app.route('/api', authenticatedApiRoutes);
+app.route('/api/admin', adminRoutes);
 
 export { app };
 export const handler = handle(app);

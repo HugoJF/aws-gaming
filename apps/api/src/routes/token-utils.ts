@@ -23,16 +23,6 @@ export function isNonEmptyStringArray(value: unknown): value is string[] {
   );
 }
 
-export function normalizeExpiresAt(value: unknown): string | null | undefined {
-  if (value === undefined) return undefined;
-  if (value === null) return null;
-  if (typeof value !== 'string') return undefined;
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return undefined;
-  return parsed.toISOString();
-}
-
 export function unknownInstanceIds(instanceIds: string[], knownIds: Set<string>): string[] {
   return instanceIds.filter((id) => !knownIds.has(id));
 }
