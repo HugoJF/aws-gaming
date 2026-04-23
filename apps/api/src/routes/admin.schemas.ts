@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { parseDateFromUnknown } from '../utils/date.js';
-import { isNonEmptyStringArray } from './token-utils.js';
+import { isNonEmptyStringArray } from '../utils/type-guards.js';
 
 const createLabelSchema = z
   .unknown()

@@ -37,6 +37,9 @@ apps/design/
 # Finder (MacOS) folder config
 .DS_Store
 
+# Claude Code
+.claude/
+
 # Terraform
 **/.terraform/*
 *.tfstate
@@ -47,3 +50,4 @@ override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
+.terraform.lock.hcl

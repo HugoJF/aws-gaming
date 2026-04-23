@@ -1,121 +1,169 @@
 # aws-gaming
 
-Game server control plane monorepo:
-- API: Hono on AWS Lambda (Function URL)
-- Web: Vite + React dashboard
-- Infra: Terraform (ECS on EC2 + API Lambda + DynamoDB)
+A self-hosted game server control plane that provisions AWS infrastructure and exposes a web dashboard for starting, stopping, and monitoring game servers. Supports Minecraft, Project Zomboid, and any generic server.
 
-## Readme Index
+## Architecture
 
-| Directory | Description |
-|-----------|-------------|
-| [`apps/`](apps/README.md) | Application workspace root |
-| [`apps/api/`](apps/api/README.md) | Hono API (Lambda) |
-| [`apps/web/`](apps/web/README.md) | React dashboard (Vite) |
-| [`packages/`](packages/README.md) | Shared packages root |
-| [`packages/contracts/`](packages/contracts/README.md) | Shared TypeScript types |
-| [`packages/config/`](packages/config/README.md) | Environment variable helpers |
-| [`packages/auth-links/`](packages/auth-links/README.md) | Token creation, hashing, and revocation |
-| [`packages/aws-control/`](packages/aws-control/README.md) | ASG, ECS, EC2, and Route53 wrappers |
-| [`infra/`](infra/README.md) | Infrastructure root |
-| [`infra/terraform/`](infra/terraform/README.md) | Terraform modules |
-| [`docs/`](docs/README.md) | Documentation index |
-| [`docs/operations-architecture.md`](docs/operations-architecture.md) | Canonical operations and architecture guide |
-| [`docs/dynamodb.md`](docs/dynamodb.md) | DynamoDB setup and operational ownership |
+```
+apps/
+  api/        Hono API deployed as AWS Lambda (Function URL)
+  web/        React + Vite dashboard (TanStack Query, React Router)
+packages/
+  contracts/  Shared TypeScript types between API and web
+  config/     Environment variable helpers
+  auth-links/ Token creation, hashing, and revocation
+  aws-control/  ASG, ECS, EC2, and Route53 AWS SDK wrappers
+infra/
+  terraform/  Full infrastructure as code (ECS on EC2, Lambda, DynamoDB, VPC)
+```
+
+### Infrastructure
+
+- **Lambda**: Hono API with a Function URL (no API Gateway)
+- **ECS on EC2**: One Auto Scaling Group + ECS service per game server, with an always-on health sidecar
+- **DynamoDB**: Token store and game instance metadata
+- **Route53**: DNS record per game server (`<game>.aws.<domain>`)
+- **S3 + DynamoDB**: Terraform remote state and locking
+
+### API
+
+Public endpoints:
+- `GET /health`
+- `GET /api/bootstrap/status`
+- `POST /api/bootstrap/admin`
+
+Authenticated (bearer token):
+- `GET /api/me`
+- `GET /api/servers`
+- `GET /api/servers/:id/status`
+- `GET /api/servers/:id/cost`
+- `GET /api/servers/:id/ping`
+- `POST /api/servers/:id/power`
+
+Admin:
+- `GET /api/admin/tokens`
+- `POST /api/admin/tokens`
+- `PATCH /api/admin/tokens/:id`
+- `POST /api/admin/tokens/:id/revoke`
+- `GET /api/admin/servers`
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Runtime | [Bun](https://bun.sh) |
+| API framework | [Hono](https://hono.dev) |
+| Frontend | React 18, Vite, Tailwind CSS, TanStack Query |
+| IaC | Terraform >= 1.6 |
+| AWS services | Lambda, ECS, EC2, DynamoDB, Route53, ASG |
+| Language | TypeScript (strict) |
 
 ## Prerequisites
 
-- `bun` (workspace package manager + scripts)
-- `terraform >= 1.6`
-- `aws` CLI configured for target account/region
-- `make`
-- `zip` (for Lambda artifact packaging)
+- [Bun](https://bun.sh) >= 1.0
+- [Terraform](https://developer.hashicorp.com/terraform) >= 1.6
+- [AWS CLI](https://aws.amazon.com/cli/) configured for your target account and region
+- `make`, `zip`
 
-## Local Dev
+## Local Development
 
 ```bash
 bun install
+
+# Run API and web in separate terminals
 bun run dev:api
 bun run dev:web
 ```
 
-## Build And Validate
+The web app reads `VITE_API_URL` from `apps/web/.env.development.local`:
 
-```bash
-# workspace build/typecheck
-bun run build
-bun run typecheck
-
-# package Lambda artifact for Terraform deploy
-make api-lambda
-
-# Terraform formatting and validation
-make tf-fmt
-make tf-validate
+```
+VITE_API_URL=https://<your-lambda-url>
 ```
 
-## Deployment (Terraform Stack)
+## Build
 
-1. One-time remote-state backend bootstrap (if not already created):
+```bash
+# Typecheck all workspaces
+bun run typecheck
+
+# Build all workspaces
+bun run build
+
+# Package Lambda artifact (required before Terraform deploy)
+make api-lambda
+```
+
+## Deployment
+
+### 1. Bootstrap remote state (one-time)
 
 ```bash
 aws s3api create-bucket \
-  --bucket hugo-aws-gaming-tf-state-sa-east-1 \
-  --region sa-east-1 \
-  --create-bucket-configuration LocationConstraint=sa-east-1
+  --bucket <your-tf-state-bucket> \
+  --region <region> \
+  --create-bucket-configuration LocationConstraint=<region>
 
 aws dynamodb create-table \
-  --table-name hugo-aws-gaming-tf-locks \
+  --table-name <your-tf-lock-table> \
   --attribute-definitions AttributeName=LockID,AttributeType=S \
   --key-schema AttributeName=LockID,KeyType=HASH \
   --billing-mode PAY_PER_REQUEST \
-  --region sa-east-1
+  --region <region>
 ```
 
-2. `infra/terraform/stack/backend.hcl` and `infra/terraform/stack/hello-world.tfvars` are committed for this personal setup.
-3. Define shared platform settings and per-server `game_instances` in `infra/terraform/stack/hello-world.tfvars`.
-4. Build API Lambda artifact:
+Update `infra/terraform/stack/backend.hcl` with your bucket and table names.
+
+### 2. Configure game instances
+
+Edit `infra/terraform/stack/hello-world.tfvars` to set your AWS region, Route53 zone, and define `game_instances`. Each instance specifies a container image, port, instance type, and game type (`minecraft`, `zomboid`, or `generic`).
+
+### 3. Deploy
 
 ```bash
-make api-lambda
+make api-lambda   # build Lambda zip
+make tf-init      # init backend
+make tf-plan      # preview changes
+make tf-apply     # apply
+make tf-output-api-url  # print deployed API URL
 ```
 
-5. Initialize backend and deploy:
+### 4. First access / admin bootstrap
 
-```bash
-make tf-init
-make tf-plan
-make tf-apply
-```
-
-6. Read important outputs:
-
-```bash
-make tf-output-api-url
-terraform -chdir=infra/terraform/stack output game_service_names
-terraform -chdir=infra/terraform/stack output game_asg_names
-```
-
-## First Access / Admin Bootstrap
-
-1. Open the deployed web app (or local web app pointing at deployed API URL).
-2. First-time users hitting `/` are redirected to `/bootstrap`.
-3. If no tokens exist yet, `/bootstrap` exposes one-time admin bootstrap.
-4. Create the initial admin token in UI. The app will log in automatically.
-5. If bootstrap is already complete, use a token URL (`/t/<token>`) or paste a raw token.
-
-Related bootstrap endpoints (public, one-time guarded):
-- `GET /api/bootstrap/status`
-- `POST /api/bootstrap/admin`
+1. Open the deployed web app.
+2. First-time visitors are redirected to `/bootstrap`.
+3. If no tokens exist, the bootstrap page lets you create the initial admin token.
+4. Log in with that token. Share additional token URLs (`/t/<token>`) with other users.
 
 ## Supported Games
 
-- `minecraft`
-- `zomboid`
-- `generic` (no GameDig checks)
+| Game | `game_type` | Notes |
+|---|---|---|
+| Minecraft (Java) | `minecraft` | Uses GameDig for player count |
+| Project Zomboid | `zomboid` | Uses GameDig for player count |
+| Any other server | `generic` | No GameDig health check |
 
-## Destroy
+## CI
 
-```bash
-make tf-destroy
-```
+GitHub Actions (`.github/workflows/ci.yml`) runs on every push and PR:
+
+- Typecheck and build all workspaces (`bun`)
+- Terraform format check and validation (no backend required)
+
+## Terraform Targets
+
+| Make target | Description |
+|---|---|
+| `make api-lambda` | Build Lambda artifact |
+| `make tf-fmt` | Format Terraform files |
+| `make tf-validate` | Validate Terraform (local backend) |
+| `make tf-init` | Initialize remote backend |
+| `make tf-plan` | Preview infrastructure changes |
+| `make tf-apply` | Apply infrastructure changes |
+| `make tf-destroy` | Destroy all managed infrastructure |
+
+## Notes
+
+- Never mutate AWS resources directly; always go through Terraform.
+- Terraform detects Lambda code changes via `source_code_hash` and redeploys automatically on `tf-apply`.
+- The health sidecar container runs alongside every game service to provide a stable ECS health target independent of game state.
